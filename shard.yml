@@ -6,8 +6,8 @@ authors:
 
 targets:
   cr-analyzer:
-    main: src/cr-analyzer.cr
+    main: src/bin/cra.cr
 
-crystal: '>= 1.18.2'
+crystal: ">= 1.18.2"
 
 license: MIT
