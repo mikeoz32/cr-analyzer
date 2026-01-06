@@ -55,6 +55,41 @@ module CRA::Psi
     @class_includes : Hash(String, Array(Crystal::ASTNode)) = {} of String => Array(Crystal::ASTNode)
     @module_includes : Hash(String, Array(Crystal::ASTNode)) = {} of String => Array(Crystal::ASTNode)
     @class_superclass : Hash(String, Crystal::ASTNode) = {} of String => Crystal::ASTNode
+    @elements_by_file : Hash(String, Array(PsiElement)) = {} of String => Array(PsiElement)
+    @type_defs_by_name : Hash(String, Hash(String, TypeDefinition)) = {} of String => Hash(String, TypeDefinition)
+    @types_by_file : Hash(String, Array(String)) = {} of String => Array(String)
+    @includes_by_file : Hash(String, Array(IncludeEntry)) = {} of String => Array(IncludeEntry)
+    @superclass_defs : Hash(String, Hash(String, Crystal::ASTNode)) = {} of String => Hash(String, Crystal::ASTNode)
+    @superclass_by_file : Hash(String, Array(String)) = {} of String => Array(String)
+    @dependencies : Hash(String, Hash(String, Bool)) = {} of String => Hash(String, Bool)
+    @reverse_dependencies : Hash(String, Hash(String, Bool)) = {} of String => Hash(String, Bool)
+    @dependency_sources : Hash(String, Hash(String, Hash(String, Bool))) = {} of String => Hash(String, Hash(String, Bool))
+    @deps_by_file : Hash(String, Array(DependencyEdge)) = {} of String => Array(DependencyEdge)
+
+    struct TypeDefinition
+      getter kind : Symbol
+      getter location : Location?
+
+      def initialize(@kind : Symbol, @location : Location?)
+      end
+    end
+
+    struct IncludeEntry
+      getter owner_name : String
+      getter node : Crystal::ASTNode
+      getter kind : Symbol
+
+      def initialize(@owner_name : String, @node : Crystal::ASTNode, @kind : Symbol)
+      end
+    end
+
+    struct DependencyEdge
+      getter owner : String
+      getter dependency : String
+
+      def initialize(@owner : String, @dependency : String)
+      end
+    end
 
     # Lightweight type hints collected from the current lexical scope.
     class TypeEnv
@@ -249,6 +284,82 @@ module CRA::Psi
       end
     end
 
+    # Finds the first instance variable definition (assign or type declaration).
+    class InstanceVarDefinitionCollector < Crystal::Visitor
+      getter definition : Crystal::ASTNode?
+
+      def initialize(@name : String, @cursor : Crystal::Location?, @include_initialize : Bool)
+      end
+
+      def visit(node : Crystal::ASTNode) : Bool
+        return false if @definition
+        true
+      end
+
+      def visit(node : Crystal::TypeDeclaration) : Bool
+        return false unless before_cursor?(node)
+        record_target(node.var)
+        true
+      end
+
+      def visit(node : Crystal::Assign) : Bool
+        return false unless before_cursor?(node)
+        record_target(node.target)
+        true
+      end
+
+      def visit(node : Crystal::MultiAssign) : Bool
+        return false unless before_cursor?(node)
+        node.targets.each { |target| record_target(target) }
+        true
+      end
+
+      def visit(node : Crystal::OpAssign) : Bool
+        return false unless before_cursor?(node)
+        record_target(node.target)
+        true
+      end
+
+      def visit(node : Crystal::Def) : Bool
+        return false unless @include_initialize && node.name == "initialize"
+        node.body.accept(self)
+        false
+      end
+
+      def visit(node : Crystal::ClassDef) : Bool
+        false
+      end
+
+      def visit(node : Crystal::ModuleDef) : Bool
+        false
+      end
+
+      def visit(node : Crystal::Macro) : Bool
+        false
+      end
+
+      private def record_target(target : Crystal::ASTNode)
+        return if @definition
+        case target
+        when Crystal::InstanceVar
+          if target.name == @name
+            @definition = target
+          end
+        when Crystal::TupleLiteral
+          target.elements.each { |elem| record_target(elem) }
+        end
+      end
+
+      private def before_cursor?(node : Crystal::ASTNode) : Bool
+        cursor = @cursor
+        return true unless cursor
+        loc = node.location
+        return true unless loc
+        loc.line_number < cursor.line_number ||
+          (loc.line_number == cursor.line_number && loc.column_number <= cursor.column_number)
+      end
+    end
+
     getter current_file : String?
 
     def with_current_file(file : String, &)
@@ -278,6 +389,7 @@ module CRA::Psi
 
     def ensure_module(name : String, owner : CRA::Psi::Module?, location : Location?) : CRA::Psi::Module
       if found = find_module(name)
+        record_type_definition(name, :module, location, found)
         return found
       end
       module_element = CRA::Psi::Module.new(
@@ -288,12 +400,14 @@ module CRA::Psi
         owner: owner,
         location: location
       )
+      record_type_definition(name, :module, location, module_element)
       attach module_element, owner
       module_element
     end
 
     def ensure_class(name : String, owner : CRA::Psi::PsiElement | Nil, location : Location?) : CRA::Psi::Class
       if found = find_class(name)
+        record_type_definition(name, :class, location, found)
         return found
       end
       class_element = CRA::Psi::Class.new(
@@ -302,12 +416,14 @@ module CRA::Psi
         owner: owner,
         location: location
       )
+      record_type_definition(name, :class, location, class_element)
       attach class_element, owner
       class_element
     end
 
     def ensure_enum(name : String, owner : CRA::Psi::PsiElement | Nil, location : Location?) : CRA::Psi::Enum
       if found = find_enum(name)
+        record_type_definition(name, :enum, location, found)
         return found
       end
       enum_element = CRA::Psi::Enum.new(
@@ -318,11 +434,13 @@ module CRA::Psi
         owner: owner,
         location: location
       )
+      record_type_definition(name, :enum, location, enum_element)
       attach enum_element, owner
       enum_element
     end
 
     def attach(element : PsiElement, owner : PsiElement?)
+      track_element(element)
       if owner.nil?
         @roots << element
         return
@@ -360,16 +478,40 @@ module CRA::Psi
     end
 
     def record_include(owner : PsiElement, include_node : Crystal::ASTNode)
+      file = @current_file
       case owner
       when CRA::Psi::Class
         add_include(@class_includes, owner.name, include_node)
+        if file
+          (@includes_by_file[file] ||= [] of IncludeEntry) << IncludeEntry.new(owner.name, include_node, :class)
+        end
       when CRA::Psi::Module
         add_include(@module_includes, owner.name, include_node)
+        if file
+          (@includes_by_file[file] ||= [] of IncludeEntry) << IncludeEntry.new(owner.name, include_node, :module)
+        end
+      end
+
+      if dependency = dependency_name_for(include_node, owner.name)
+        record_dependency(owner.name, dependency)
       end
     end
 
     def set_superclass(name : String, superclass : Crystal::ASTNode)
-      @class_superclass[name] ||= superclass
+      file = @current_file
+      if file
+        defs = (@superclass_defs[name] ||= {} of String => Crystal::ASTNode)
+        defs[file] = superclass
+        @class_superclass[name] = superclass
+        owners = (@superclass_by_file[file] ||= [] of String)
+        owners << name unless owners.includes?(name)
+      else
+        @class_superclass[name] ||= superclass
+      end
+
+      if dependency = dependency_name_for(superclass, parent_namespace(name))
+        record_dependency(name, dependency)
+      end
     end
 
     def location_for(node : Crystal::ASTNode) : Location
@@ -382,6 +524,243 @@ module CRA::Psi
         Location.new(start_line, start_col, end_line, end_col)
       else
         Location.new(0, 0, 0, 0)
+      end
+    end
+
+    def remove_file(file : String)
+      if elements = @elements_by_file.delete(file)
+        elements.each { |element| detach(element) }
+      end
+
+      if includes = @includes_by_file.delete(file)
+        includes.each do |entry|
+          store = entry.kind == :class ? @class_includes : @module_includes
+          if nodes = store[entry.owner_name]?
+            nodes.delete(entry.node)
+            store.delete(entry.owner_name) if nodes.empty?
+          end
+        end
+      end
+
+      if owners = @superclass_by_file.delete(file)
+        owners.each do |owner|
+          if defs = @superclass_defs[owner]?
+            defs.delete(file)
+            if defs.empty?
+              @superclass_defs.delete(owner)
+              @class_superclass.delete(owner)
+            else
+              @class_superclass[owner] = defs.values.first
+            end
+          end
+        end
+      end
+
+      if edges = @deps_by_file.delete(file)
+        edges.each { |edge| remove_dependency(edge.owner, edge.dependency, file) }
+      end
+
+      if type_names = @types_by_file.delete(file)
+        type_names.each { |name| remove_type_definition(name, file) }
+      end
+    end
+
+    def type_names_for_file(file : String) : Array(String)
+      @types_by_file[file]? || [] of String
+    end
+
+    def dependent_types_for(types : Array(String)) : Array(String)
+      queue = types.dup
+      visited = {} of String => Bool
+      results = [] of String
+
+      idx = 0
+      while idx < queue.size
+        current = queue[idx]
+        idx += 1
+        if deps = @reverse_dependencies[current]?
+          deps.each_key do |dependent|
+            next if visited[dependent]?
+            visited[dependent] = true
+            results << dependent
+            queue << dependent
+          end
+        end
+      end
+      results
+    end
+
+    def files_for_types(types : Array(String)) : Array(String)
+      files = [] of String
+      types.each do |name|
+        if defs = @type_defs_by_name[name]?
+          defs.each_key { |file| files << file }
+        end
+      end
+      files.uniq
+    end
+
+    private def track_element(element : PsiElement)
+      return if element.is_a?(CRA::Psi::Module) || element.is_a?(CRA::Psi::Class) || element.is_a?(CRA::Psi::Enum)
+      file = element.file
+      return unless file
+      (@elements_by_file[file] ||= [] of PsiElement) << element
+    end
+
+    private def record_type_definition(name : String, kind : Symbol, location : Location?, element : PsiElement)
+      file = @current_file
+      return unless file
+
+      defs = (@type_defs_by_name[name] ||= {} of String => TypeDefinition)
+      defs[file] = TypeDefinition.new(kind, location)
+
+      names = (@types_by_file[file] ||= [] of String)
+      names << name unless names.includes?(name)
+
+      if element.file.nil? || element.file == file
+        element.file = file
+        element.location = location if location
+      end
+    end
+
+    private def remove_type_definition(name : String, file : String)
+      defs = @type_defs_by_name[name]?
+      return unless defs
+
+      defs.delete(file)
+      if defs.empty?
+        @type_defs_by_name.delete(name)
+        if element = find_type(name)
+          detach(element)
+        end
+        return
+      end
+
+      if element = find_type(name)
+        if element.file.nil? || element.file == file
+          new_file, defn = defs.first
+          element.file = new_file
+          element.location = defn.location
+        end
+      end
+    end
+
+    private def dependency_name_for(node : Crystal::ASTNode, context : String?) : String?
+      if resolved = resolve_type_node(node, context)
+        return resolved.name
+      end
+
+      case node
+      when Crystal::Path
+        name = node.full
+        return name if node.global?
+        if context && !context.empty? && !name.includes?("::")
+          if scope = parent_namespace(context)
+            return "#{scope}::#{name}"
+          end
+        end
+        name
+      when Crystal::Generic
+        dependency_name_for(node.name, context)
+      when Crystal::Metaclass
+        dependency_name_for(node.name, context)
+      else
+        nil
+      end
+    end
+
+    private def parent_namespace(name : String) : String?
+      parts = name.split("::")
+      return nil if parts.size < 2
+      parts[0...-1].join("::")
+    end
+
+    private def record_dependency(owner : String, dependency : String)
+      return if owner.empty? || dependency.empty?
+      file = @current_file
+      return unless file
+
+      sources = (@dependency_sources[owner] ||= {} of String => Hash(String, Bool))
+      files = (sources[dependency] ||= {} of String => Bool)
+      return if files[file]?
+
+      files[file] = true
+      (@dependencies[owner] ||= {} of String => Bool)[dependency] = true
+      (@reverse_dependencies[dependency] ||= {} of String => Bool)[owner] = true
+      (@deps_by_file[file] ||= [] of DependencyEdge) << DependencyEdge.new(owner, dependency)
+    end
+
+    private def remove_dependency(owner : String, dependency : String, file : String)
+      sources = @dependency_sources[owner]?
+      return unless sources
+      files = sources[dependency]?
+      return unless files
+
+      files.delete(file)
+      unless files.empty?
+        return
+      end
+
+      sources.delete(dependency)
+      @dependency_sources.delete(owner) if sources.empty?
+
+      if deps = @dependencies[owner]?
+        deps.delete(dependency)
+        @dependencies.delete(owner) if deps.empty?
+      end
+      if reverse = @reverse_dependencies[dependency]?
+        reverse.delete(owner)
+        @reverse_dependencies.delete(dependency) if reverse.empty?
+      end
+    end
+
+    private def detach(element : PsiElement)
+      owner = case element
+              when CRA::Psi::Method
+                element.owner
+              when CRA::Psi::Class
+                element.owner
+              when CRA::Psi::Enum
+                element.owner
+              when CRA::Psi::EnumMember
+                element.owner
+              when CRA::Psi::Module
+                element.owner
+              else
+                nil
+              end
+
+      if owner.nil?
+        @roots.delete(element)
+        return
+      end
+
+      case owner
+      when CRA::Psi::Module
+        case element
+        when CRA::Psi::Class
+          owner.classes.delete(element)
+        when CRA::Psi::Method
+          owner.methods.delete(element)
+        when CRA::Psi::Module, CRA::Psi::Enum
+          @roots.delete(element)
+        end
+      when CRA::Psi::Class
+        case element
+        when CRA::Psi::Method
+          owner.methods.delete(element)
+        else
+          @roots.delete(element)
+        end
+      when CRA::Psi::Enum
+        case element
+        when CRA::Psi::Method
+          owner.methods.delete(element)
+        when CRA::Psi::EnumMember
+          owner.members.delete(element)
+        else
+          @roots.delete(element)
+        end
       end
     end
 
@@ -400,6 +779,7 @@ module CRA::Psi
           methods: [] of CRA::Psi::Method,
           owner: nil
         )
+        record_type_definition(name, :module, nil, module_element)
         @roots << module_element
         return module_element
       end
@@ -655,6 +1035,27 @@ module CRA::Psi
             )
           end
         end
+      when Crystal::InstanceVar
+        if def_node = instance_var_definition(scope_def, scope_class, node.name, cursor)
+          file = current_file || @current_file
+          type_env ||= build_type_env(scope_def, scope_class, cursor)
+          ivar_type = type_env.ivars[node.name]?.try(&.to_s) || "Unknown"
+          if context && (owner = find_class(context))
+            results << CRA::Psi::InstanceVar.new(
+              file: file,
+              name: node.name,
+              type: ivar_type,
+              owner: owner,
+              location: location_for(def_node)
+            )
+          else
+            results << CRA::Psi::LocalVar.new(
+              file: file,
+              name: node.name,
+              location: location_for(def_node)
+            )
+          end
+        end
       when Crystal::Call
         candidates = [] of CRA::Psi::Method
         if obj = node.obj
@@ -756,6 +1157,25 @@ module CRA::Psi
       end
       scope_def.body.accept(LocalVarCollector.new(definitions, cursor))
       definitions[name]?
+    end
+
+    private def instance_var_definition(
+      scope_def : Crystal::Def?,
+      scope_class : Crystal::ClassDef?,
+      name : String,
+      cursor : Crystal::Location?
+    ) : Crystal::ASTNode?
+      if scope_def
+        def_finder = InstanceVarDefinitionCollector.new(name, cursor, false)
+        scope_def.body.accept(def_finder)
+        return def_finder.definition if def_finder.definition
+      end
+
+      return nil unless scope_class
+
+      class_finder = InstanceVarDefinitionCollector.new(name, nil, true)
+      scope_class.body.accept(class_finder)
+      class_finder.definition
     end
 
     private def resolve_constructor(owner : CRA::Psi::PsiElement, call : Crystal::Call, context : String?) : Array(Method)
@@ -1064,12 +1484,13 @@ module CRA::Psi
 
       node.members.each do |member|
         next unless member.is_a?(Crystal::Arg)
-        enum_element.members << CRA::Psi::EnumMember.new(
+        member_element = CRA::Psi::EnumMember.new(
           file: @index.current_file,
           name: member.name,
           owner: enum_element,
           location: @index.location_for(member)
         )
+        @index.attach member_element, enum_element
       end
 
       @owner_stack << enum_element

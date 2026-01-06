@@ -19,8 +19,8 @@ module CRA
     end
 
     class PsiElement
-      getter file : String?
-      getter location : Location?
+      property file : String?
+      property location : Location?
       getter name : String
 
       def initialize(@file : String?, @name : String, @location : Location? = nil)

@@ -175,15 +175,65 @@ module CRA
     getter path : String
 
     getter program : Crystal::ASTNode?
+    getter text : String
 
     def initialize(@uri : URI)
       @path = @uri.path
-      parse
+      @text = File.exists?(@path) ? File.read(@path) : ""
+      parse(@text)
     end
 
-    def parse
-      lexer = Crystal::Parser.new(File.read(@path))
+    def update(text : String)
+      @text = text
+      parse(@text)
+    end
+
+    def apply_changes(changes : Array(Types::TextDocumentContentChangeEvent))
+      changes.each do |change|
+        if range = change.range
+          apply_range_change(range, change.text)
+        else
+          @text = change.text
+        end
+      end
+      parse(@text)
+    end
+
+    def reload_from_disk
+      return unless File.exists?(@path)
+      @text = File.read(@path)
+      parse(@text)
+    end
+
+    private def parse(text : String)
+      lexer = Crystal::Parser.new(text)
       @program = lexer.parse
+    end
+
+    private def apply_range_change(range : Types::Range, new_text : String)
+      start_index = offset_for(@text, range.start_position)
+      end_index = offset_for(@text, range.end_position)
+
+      prefix = @text.byte_slice(0, start_index) || ""
+      suffix = @text.byte_slice(end_index, @text.bytesize - end_index) || ""
+      @text = "#{prefix}#{new_text}#{suffix}"
+    end
+
+    private def offset_for(text : String, position : Types::Position) : Int32
+      target_line = position.line
+      target_column = position.character
+      index = 0
+      current_line = 0
+
+      text.each_line do |line|
+        if current_line == target_line
+          return index + target_column
+        end
+        index += line.bytesize
+        current_line += 1
+      end
+
+      index + target_column
     end
 
     def node_context(position : Types::Position) : NodeFinder
@@ -358,6 +408,10 @@ module CRA
       @indexer
     end
 
+    def analyzer : Psi::SemanticIndex
+      @analyzer
+    end
+
     def document(uri : String) : WorkspaceDocument?
       @documents[uri] ||= WorkspaceDocument.new(URI.parse(uri))
     end
@@ -393,6 +447,54 @@ module CRA
         next
       end
       @analyzer.dump_roots
+    end
+
+    def reindex_file(uri : String, program : Crystal::ASTNode? = nil) : Array(String)
+      reindexed = [] of String
+      path = URI.parse(uri).path
+      return reindexed unless File.exists?(path) || program
+
+      old_types = @analyzer.type_names_for_file(uri)
+      program ||= Crystal::Parser.new(File.read(path)).parse
+
+      @analyzer.remove_file(uri)
+      @analyzer.enter(uri)
+      @analyzer.index(program)
+
+      @indexer.enter(uri)
+      program.accept(@indexer)
+      reindexed << uri
+
+      new_types = @analyzer.type_names_for_file(uri)
+      changed_types = (old_types + new_types).uniq
+      dependent_types = @analyzer.dependent_types_for(changed_types)
+      dependent_files = @analyzer.files_for_types(dependent_types)
+
+      dependent_files.each do |dep_uri|
+        next if dep_uri == uri
+        dep_path = URI.parse(dep_uri).path
+        next unless File.exists?(dep_path)
+
+        begin
+          dep_program = Crystal::Parser.new(File.read(dep_path)).parse
+        rescue ex : Exception
+          Log.error { "Error parsing #{dep_path}: #{ex.message}" }
+          next
+        end
+
+        @analyzer.remove_file(dep_uri)
+        @analyzer.enter(dep_uri)
+        @analyzer.index(dep_program)
+
+        @indexer.enter(dep_uri)
+        dep_program.accept(@indexer)
+        reindexed << dep_uri
+      end
+
+      reindexed
+    rescue ex : Exception
+      Log.error { "Error reindexing #{uri}: #{ex.message}" }
+      [] of String
     end
 
     def complete(request : Types::CompletionRequest) : Array(Types::CompletionItem)

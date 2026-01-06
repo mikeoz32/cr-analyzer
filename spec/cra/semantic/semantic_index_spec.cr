@@ -463,6 +463,118 @@ describe CRA::Psi::SemanticIndex do
     defs.first.location.not_nil!.start_line.should eq(1)
   end
 
+  it "resolves instance variable definitions from class or initialize" do
+    code = <<-CRYSTAL
+      class Foo
+        @bar : Int32
+
+        def initialize
+          @baz = 1
+        end
+
+        def value
+          @bar
+        end
+
+        def other
+          @baz
+        end
+      end
+    CRYSTAL
+
+    index, node = build_index(code)
+
+    class_node = find_first(node) do |n|
+      n.is_a?(Crystal::ClassDef) && n.name.full == "Foo"
+    end
+    class_node.should_not be_nil
+    class_def = class_node.not_nil!.as(Crystal::ClassDef)
+
+    def_value = find_first(node) do |n|
+      n.is_a?(Crystal::Def) && n.name == "value"
+    end
+    def_value.should_not be_nil
+    def_value_node = def_value.not_nil!.as(Crystal::Def)
+
+    def_other = find_first(node) do |n|
+      n.is_a?(Crystal::Def) && n.name == "other"
+    end
+    def_other.should_not be_nil
+    def_other_node = def_other.not_nil!.as(Crystal::Def)
+
+    ivar_bar = find_first(node) do |n|
+      if n.is_a?(Crystal::InstanceVar)
+        n.name == "@bar" && n.location.try(&.line_number) == 9
+      else
+        false
+      end
+    end
+    ivar_bar.should_not be_nil
+    ivar_bar_node = ivar_bar.not_nil!.as(Crystal::InstanceVar)
+
+    defs_bar = index.find_definitions(ivar_bar_node, "Foo", def_value_node, class_def, ivar_bar_node.location)
+    defs_bar.size.should eq(1)
+    defs_bar.first.should be_a(CRA::Psi::InstanceVar)
+    defs_bar.first.location.not_nil!.start_line.should eq(1)
+
+    ivar_baz = find_first(node) do |n|
+      if n.is_a?(Crystal::InstanceVar)
+        n.name == "@baz" && n.location.try(&.line_number) == 13
+      else
+        false
+      end
+    end
+    ivar_baz.should_not be_nil
+    ivar_baz_node = ivar_baz.not_nil!.as(Crystal::InstanceVar)
+
+    defs_baz = index.find_definitions(ivar_baz_node, "Foo", def_other_node, class_def, ivar_baz_node.location)
+    defs_baz.size.should eq(1)
+    defs_baz.first.should be_a(CRA::Psi::InstanceVar)
+    defs_baz.first.location.not_nil!.start_line.should eq(4)
+  end
+
+  it "removes file-scoped elements and keeps shared type definitions" do
+    code_a = <<-CRYSTAL
+      class Foo
+        def bar
+        end
+      end
+    CRYSTAL
+
+    code_b = <<-CRYSTAL
+      class Foo
+        def baz
+        end
+      end
+    CRYSTAL
+
+    index = CRA::Psi::SemanticIndex.new
+
+    node_a = Crystal::Parser.new(code_a).parse
+    index.enter("file:///a.cr")
+    index.index(node_a)
+
+    node_b = Crystal::Parser.new(code_b).parse
+    index.enter("file:///b.cr")
+    index.index(node_b)
+
+    foo = index.find_class("Foo")
+    foo.should_not be_nil
+    foo_methods = foo.not_nil!.methods.map(&.name)
+    foo_methods.should contain("bar")
+    foo_methods.should contain("baz")
+
+    index.remove_file("file:///b.cr")
+    foo = index.find_class("Foo")
+    foo.should_not be_nil
+    foo_methods = foo.not_nil!.methods.map(&.name)
+    foo_methods.should contain("bar")
+    foo_methods.should_not contain("baz")
+
+    index.remove_file("file:///a.cr")
+    index.find_class("Foo").should be_nil
+  end
+
   it "resolves constructor calls to initialize when no class new matches" do
     code = <<-CRYSTAL
       class Bean

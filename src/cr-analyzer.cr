@@ -75,6 +75,66 @@ module CRA
         end
       end
 
+      def handle(request : Types::DidOpenTextDocumentNotification)
+        Log.info { "Handling didOpen notification" }
+        @workspace.try do |ws|
+          uri = request.text_document.uri
+          document = ws.document(uri)
+          program = nil
+          begin
+            document.try &.update(request.text_document.text)
+            program = document.try(&.program)
+          rescue ex
+            Log.error { "Error parsing #{uri}: #{ex.message}" }
+          end
+          ws.reindex_file(uri, program)
+        end
+        nil
+      end
+
+      def handle(request : Types::DidChangeTextDocumentNotification)
+        Log.info { "Handling didChange notification" }
+        @workspace.try do |ws|
+          uri = request.text_document.uri
+          document = ws.document(uri)
+          program = nil
+          begin
+            document.try &.apply_changes(request.content_changes)
+            program = document.try(&.program)
+          rescue ex
+            Log.error { "Error parsing #{uri}: #{ex.message}" }
+          end
+          ws.reindex_file(uri, program)
+        end
+        nil
+      end
+
+      def handle(request : Types::DidSaveTextDocumentNotification)
+        Log.info { "Handling didSave notification" }
+        @workspace.try do |ws|
+          uri = request.text_document.uri
+          if text = request.text
+            document = ws.document(uri)
+            program = nil
+            begin
+              document.try &.update(text)
+              program = document.try(&.program)
+            rescue ex
+              Log.error { "Error parsing #{uri}: #{ex.message}" }
+            end
+            ws.reindex_file(uri, program)
+          else
+            ws.reindex_file(uri)
+          end
+        end
+        nil
+      end
+
+      def handle(request : Types::DidCloseTextDocumentNotification)
+        Log.info { "Handling didClose notification" }
+        nil
+      end
+
       def handle(request : Types::InitializeRequest)
         Log.error { "Handling initialize request" }
         request.root_uri.try do |uri|
@@ -83,6 +143,11 @@ module CRA
         end
         Types::Response.new(request.id, Types::InitializeResult.new(
           capabilities: Types::ServerCapabilities.new(
+            text_document_sync: Types::TextDocumentSyncOptions.new(
+              open_close: true,
+              change: Types::TextDocumentSyncKind::Incremental,
+              save: Types::SaveOptions.new(include_text: true)
+            ),
             document_symbol_provider: false,
             definition_provider: true,
             references_provider: true,
@@ -199,5 +264,3 @@ module CRA
     end
   end
 end
-
-
