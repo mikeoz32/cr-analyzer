@@ -237,7 +237,9 @@ module CRA
         when Crystal::Call
           # Handle simple calls like "foo" or "foo.bar"
           if obj = node.obj
-            "#{value_to_s(obj)}.#{node.name}"
+            obj_value = value_to_s(obj)
+            return node.name if obj_value.empty?
+            "#{obj_value}.#{node.name}"
           else
             node.name
           end

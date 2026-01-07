@@ -32,6 +32,25 @@ module CRA
       end
     end
 
+    # Completion item kinds are numeric in LSP; accept both ints and strings.
+    module CompletionItemKindConverter
+      def self.from_json(pull : JSON::PullParser)
+        case pull.kind
+        when JSON::PullParser::Kind::Int
+          CompletionItemKind.from_value(pull.read_int.to_i32)
+        when JSON::PullParser::Kind::String
+          CompletionItemKind.parse(pull.read_string)
+        else
+          pull.read_null
+          nil
+        end
+      end
+
+      def self.to_json(value : CompletionItemKind, json : JSON::Builder)
+        json.number(value.to_i)
+      end
+    end
+
     module ErrorCodes
       ERROR_CODE_INVALID_REQUEST  = -32600
       ERROR_CODE_METHOD_NOT_FOUND = -32601
@@ -653,6 +672,16 @@ module CRA
       Incremental = 2
     end
 
+    module TextDocumentSyncKindConverter
+      def self.from_json(pull : JSON::PullParser)
+        TextDocumentSyncKind.from_value(pull.read_int.to_i32)
+      end
+
+      def self.to_json(value : TextDocumentSyncKind, json : JSON::Builder)
+        json.number(value.to_i)
+      end
+    end
+
     class SaveOptions
       include JSON::Serializable
 
@@ -668,6 +697,7 @@ module CRA
 
       @[JSON::Field(key: "openClose")]
       property open_close : Bool?
+      @[JSON::Field(converter: ::CRA::Types::TextDocumentSyncKindConverter)]
       property change : TextDocumentSyncKind?
       @[JSON::Field(key: "willSave")]
       property will_save : Bool?
@@ -2266,6 +2296,7 @@ module CRA
       property label : String
       @[JSON::Field(key: "labelDetails")]
       property label_details : CompletionItemLabelDetails?
+      @[JSON::Field(converter: ::CRA::Types::CompletionItemKindConverter)]
       property kind : CompletionItemKind?
       property tags : Array(CompletionItemTag)?
       property detail : String?

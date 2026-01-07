@@ -103,6 +103,7 @@ module CRA
             program = document.try(&.program)
           rescue ex
             Log.error { "Error parsing #{uri}: #{ex.message}" }
+            return nil
           end
           ws.reindex_file(uri, program)
         end
@@ -145,7 +146,7 @@ module CRA
           capabilities: Types::ServerCapabilities.new(
             text_document_sync: Types::TextDocumentSyncOptions.new(
               open_close: true,
-              change: Types::TextDocumentSyncKind::Incremental,
+              change: Types::TextDocumentSyncKind::Full,
               save: Types::SaveOptions.new(include_text: true)
             ),
             document_symbol_provider: false,

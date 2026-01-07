@@ -107,4 +107,12 @@ describe CRA::NodeFinder do
     finder_call.node.should be_a(Crystal::Call)
     finder_call.node.as(Crystal::Call).name.should eq("string_at")
   end
+
+  it "tracks the previous node when the cursor is after a generic" do
+    code = "Array(Int32)\n"
+    finder = find_finder(code, "Array(Int32)", 0, "Array(Int32)".size + 1)
+    finder.node.should be_nil
+    finder.previous_node.should be_a(Crystal::Generic)
+    finder.previous_node.as(Crystal::Generic).name.to_s.should eq("Array")
+  end
 end

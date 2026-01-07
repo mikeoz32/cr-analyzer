@@ -150,6 +150,43 @@ describe CRA::Psi::SemanticIndex do
     defs_box.first.name.should eq("Box")
   end
 
+  it "resolves alias definitions" do
+    code = <<-CRYSTAL
+      alias Text = String
+      Text
+    CRYSTAL
+
+    index, node = build_index(code)
+
+    path_text = find_first(node) do |n|
+      n.is_a?(Crystal::Path) && n.full == "Text" && n.location.try(&.line_number) == 2
+    end
+    path_text.should_not be_nil
+
+    defs_text = index.find_definitions(path_text.not_nil!)
+    defs_text.size.should eq(1)
+    defs_text.first.should be_a(CRA::Psi::Alias)
+    defs_text.first.name.should eq("Text")
+  end
+
+  it "returns all type definitions across files" do
+    index = CRA::Psi::SemanticIndex.new
+
+    node_a = Crystal::Parser.new("class Foo\nend\n").parse
+    index.enter("file:///a.cr")
+    index.index(node_a)
+
+    node_b = Crystal::Parser.new("class Foo\n  def bar; end\nend\n").parse
+    index.enter("file:///b.cr")
+    index.index(node_b)
+
+    usage = Crystal::Parser.new("Foo").parse.as(Crystal::Path)
+    defs = index.find_definitions(usage)
+
+    files = defs.compact_map(&.file).sort
+    files.should eq(["file:///a.cr", "file:///b.cr"])
+  end
+
   it "resolves enum types and enum members" do
     code = <<-CRYSTAL
       enum Color

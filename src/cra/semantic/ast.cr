@@ -1,6 +1,45 @@
 require "../types.cr"
 module CRA
   module Psi
+    struct TypeRef
+      getter name : String?
+      getter args : Array(TypeRef)
+      getter union_types : Array(TypeRef)
+
+      def initialize(@name : String?, @args : Array(TypeRef) = [] of TypeRef, @union_types : Array(TypeRef) = [] of TypeRef)
+      end
+
+      def self.named(name : String, args : Array(TypeRef) = [] of TypeRef) : TypeRef
+        TypeRef.new(name, args, [] of TypeRef)
+      end
+
+      def self.union(types : Array(TypeRef)) : TypeRef
+        TypeRef.new(nil, [] of TypeRef, types)
+      end
+
+      def union? : Bool
+        !@union_types.empty?
+      end
+
+      def display : String
+        if union?
+          @union_types.map(&.display).join(" | ")
+        elsif name = @name
+          if @args.empty?
+            name
+          else
+            "#{name}(#{@args.map(&.display).join(", ")})"
+          end
+        else
+          ""
+        end
+      end
+
+      def to_s(io : IO) : Nil
+        io << display
+      end
+    end
+
     class Location
       getter start_line : Int32
       getter start_character : Int32
@@ -58,6 +97,7 @@ module CRA
 
     class Method < PsiElement
       getter return_type : String
+      getter return_type_ref : TypeRef?
       getter parameters : Array(String)
       getter min_arity : Int32
       getter max_arity : Int32?
@@ -72,6 +112,7 @@ module CRA
         @class_method : Bool,
         @owner : PsiElement | Nil,
         @parameters : Array(String) = [] of String,
+        @return_type_ref : TypeRef? = nil,
         @location : Location? = nil)
       end
     end
@@ -114,6 +155,12 @@ module CRA
     class LocalVar < PsiElement
       getter owner : PsiElement | Nil
       def initialize(@file : String?, @name : String, @owner : PsiElement | Nil = nil, @location : Location? = nil)
+      end
+    end
+
+    class Alias < PsiElement
+      getter target : TypeRef?
+      def initialize(@file : String?, @name : String, @target : TypeRef? = nil, @location : Location? = nil)
       end
     end
 
