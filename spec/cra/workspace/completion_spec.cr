@@ -241,6 +241,32 @@ describe CRA::Workspace do
     end
   end
 
+  it "limits keywords inside if conditions" do
+    code = <<-CRYSTAL
+      def demo
+        if true
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "if_condition.cr")
+      File.write(path, code)
+
+      ws = CRA::Workspace.from_s("file://#{dir}")
+      ws.scan
+
+      uri = "file://#{path}"
+      index = index_for(code, "if true") + "if ".size
+      pos = position_for(code, index)
+      request = completion_request(uri, pos)
+      items = ws.complete(request)
+
+      labels(items).should contain("true")
+      labels(items).should_not contain("begin")
+    end
+  end
+
   it "completes alias types" do
     code = <<-CRYSTAL
       alias Token = String

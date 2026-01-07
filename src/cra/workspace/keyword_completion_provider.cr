@@ -20,6 +20,10 @@ module CRA
       self super nil true false
     ]
 
+    CONDITION_KEYWORDS = %w[
+      true false nil self super
+    ]
+
     LOOP_KEYWORDS = %w[
       break next
     ]
@@ -64,6 +68,8 @@ module CRA
     end
 
     private def keywords_for_context(context : CompletionContext) : Array(String)
+      return CONDITION_KEYWORDS if condition_context?(context)
+
       keywords = [] of String
       in_def = !context.enclosing_def.nil?
       in_type = context.node_path.any? do |node|
@@ -91,6 +97,52 @@ module CRA
       keywords.concat(BEGIN_KEYWORDS) if in_exception
 
       keywords
+    end
+
+    private def condition_context?(context : CompletionContext) : Bool
+      cursor = context.cursor_location
+      return false unless cursor
+
+      context.node_path.reverse_each do |node|
+        case node
+        when Crystal::If
+          return in_node_range?(cursor, node.cond)
+        when Crystal::Unless
+          return in_node_range?(cursor, node.cond)
+        when Crystal::While
+          return in_node_range?(cursor, node.cond)
+        when Crystal::Until
+          return in_node_range?(cursor, node.cond)
+        when Crystal::Case
+          return in_node_range?(cursor, node.cond) if node.cond
+        when Crystal::When
+          first = node.conds.first?
+          last = node.conds.last?
+          return in_node_range?(cursor, first, last) if first
+        end
+      end
+
+      false
+    end
+
+    private def in_node_range?(cursor : Crystal::Location, start_node : Crystal::ASTNode?, end_node : Crystal::ASTNode? = nil) : Bool
+      return false unless start_node
+      start_loc = start_node.location
+      return false unless start_loc
+      end_loc = (end_node || start_node).end_location || (end_node || start_node).location
+      return false unless end_loc
+
+      location_after_or_equal?(cursor, start_loc) && location_before_or_equal?(cursor, end_loc)
+    end
+
+    private def location_before_or_equal?(left : Crystal::Location, right : Crystal::Location) : Bool
+      left.line_number < right.line_number ||
+        (left.line_number == right.line_number && left.column_number <= right.column_number)
+    end
+
+    private def location_after_or_equal?(left : Crystal::Location, right : Crystal::Location) : Bool
+      left.line_number > right.line_number ||
+        (left.line_number == right.line_number && left.column_number >= right.column_number)
     end
   end
 end
