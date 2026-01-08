@@ -11,6 +11,7 @@ The server runs over stdio (stdin/stdout) and uses JSON-RPC.
 - textDocument/didChange (full text)
 - textDocument/didSave (full text)
 - textDocument/completion
+- completionItem/resolve
 - textDocument/definition
 - textDocument/hover
 

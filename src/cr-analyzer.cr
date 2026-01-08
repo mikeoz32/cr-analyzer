@@ -45,6 +45,18 @@ module CRA
         nil
       end
 
+      def handle(request : Types::CompletionItemResolveRequest)
+        Log.error { "Handling completion resolve request" }
+        @workspace.try do |ws|
+          item = ws.resolve_completion_item(request.item)
+          return Types::Response.new(request.id, item)
+        end
+        Types::Response.new(request.id, request.item)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
       def handle(request : Types::HoverRequest)
         Log.error { "Handling hover request" }
         @workspace.try do |ws|
@@ -171,7 +183,7 @@ module CRA
             document_formatting_provider: false,
             document_range_formatting_provider: false,
             rename_provider: true,
-            completion_provider: Types::CompletionOptions.new(trigger_characters: [".", ":", "@", "#", "<", "\"", "'", "/", " "])
+            completion_provider: Types::CompletionOptions.new(resolve_provider: true, trigger_characters: [".", ":", "@", "#", "<", "\"", "'", "/", " "])
           )
         ))
       rescue ex

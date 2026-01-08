@@ -213,7 +213,8 @@ module CRA::Psi
           file: @index.current_file,
           name: member.name,
           owner: enum_element,
-          location: @index.location_for(member)
+          location: @index.location_for(member),
+          doc: member.doc
         )
         @index.attach member_element, enum_element
       end

@@ -123,6 +123,7 @@ module CRA
         "initialized"               => InitializedNotification,
         "shutdown"                  => ShutdownRequest,
         "textDocument/completion"   => CompletionRequest,
+        "completionItem/resolve"    => CompletionItemResolveRequest,
         "textDocument/hover"        => HoverRequest,
         "textDocument/signatureHelp" => SignatureHelpRequest,
         "textDocument/definition"   => DefinitionRequest,
@@ -207,7 +208,7 @@ module CRA
     # results are captured via JSON::Any.
     alias DefinitionResult = Location | Locations | LocationLinks
     alias ReferencesResult = Array(Location)
-    alias ResponseResult = InitializeResult | CompletionList | Hover | SignatureHelp | DefinitionResult | ReferencesResult | DocumentSymbols | SymbolInformations | WorkspaceEdit | TextEdits | DocumentDiagnosticReport | WorkspaceDiagnosticReport | MessageActionItem | JSON::Any
+    alias ResponseResult = InitializeResult | CompletionList | CompletionItem | Hover | SignatureHelp | DefinitionResult | ReferencesResult | DocumentSymbols | SymbolInformations | WorkspaceEdit | TextEdits | DocumentDiagnosticReport | WorkspaceDiagnosticReport | MessageActionItem | JSON::Any
 
     class Response < Message
       include JSON::Serializable
@@ -2863,6 +2864,11 @@ module CRA
 
       @[JSON::Field(nested: "params", key: "context")]
       property context : CompletionContext?
+    end
+
+    class CompletionItemResolveRequest < Request
+      @[JSON::Field(key: "params")]
+      property item : CompletionItem
     end
 
     class HoverRequest < Request

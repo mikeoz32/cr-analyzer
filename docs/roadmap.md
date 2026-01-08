@@ -33,7 +33,7 @@ Legend:
 - [ ] Inlay Hint Refresh
 - [ ] Moniker
 - [x] Completion Proposals
-- [ ] Completion Item Resolve
+- [x] Completion Item Resolve
 - [ ] Publish Diagnostics
 - [ ] Pull Diagnostics
 - [ ] Signature Help

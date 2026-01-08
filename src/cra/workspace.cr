@@ -196,6 +196,28 @@ module CRA
       unique
     end
 
+    def resolve_completion_item(item : Types::CompletionItem) : Types::CompletionItem
+      return item if item.documentation
+      data = item.data
+      return item unless data
+
+      data_hash = data.as_h?
+      return item unless data_hash
+
+      signature = data_hash["signature"]?.try(&.as_s?)
+      doc = data_hash["doc"]?.try(&.as_s?)
+      return item unless signature || doc
+
+      if signature && !signature.empty?
+        item.detail = signature unless item.detail == signature
+      end
+      item.documentation = markdown_documentation(signature, doc)
+      item
+    rescue ex
+      Log.error { "Error resolving completion item: #{ex.message}" }
+      item
+    end
+
     def find_definitions(request : Types::DefinitionRequest) : Array(Types::Location)
       file = document request.text_document.uri
       position = request.position
@@ -264,6 +286,24 @@ module CRA
       JSON::Any.new({
         "kind" => JSON::Any.new("markdown"),
         "value" => JSON::Any.new(value),
+      })
+    end
+
+    private def markdown_documentation(signature : String?, doc : String?) : JSON::Any
+      sections = [] of String
+      signature = signature.try(&.strip)
+      doc = doc.try(&.strip)
+
+      if signature && !signature.empty?
+        sections << "```crystal\n#{signature}\n```"
+      end
+      if doc && !doc.empty?
+        sections << doc
+      end
+
+      JSON::Any.new({
+        "kind" => JSON::Any.new("markdown"),
+        "value" => JSON::Any.new(sections.join("\n\n")),
       })
     end
 
