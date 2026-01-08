@@ -206,5 +206,33 @@ module CRA::Psi
       end
       results
     end
+
+    def signature_help_methods(
+      call : Crystal::Call,
+      context : String? = nil,
+      scope_def : Crystal::Def? = nil,
+      scope_class : Crystal::ClassDef? = nil,
+      cursor : Crystal::Location? = nil
+    ) : Array(Method)
+      if obj = call.obj
+        if (obj.is_a?(Crystal::Path) || obj.is_a?(Crystal::Generic) || obj.is_a?(Crystal::Metaclass)) && call.name == "new"
+          if owner = resolve_type_node(obj, context)
+            class_methods = find_methods_with_ancestors(owner, "new", true)
+            return class_methods unless class_methods.empty?
+            return find_methods_with_ancestors(owner, "initialize", false)
+          end
+        end
+
+        if owner_info = resolve_receiver_owner(obj, context, scope_def, scope_class, cursor)
+          owner, class_method = owner_info
+          return find_methods_with_ancestors(owner, call.name, class_method)
+        end
+      elsif owner_info = resolve_receiver_owner(nil, context, scope_def, scope_class, cursor)
+        owner, class_method = owner_info
+        return find_methods_with_ancestors(owner, call.name, class_method)
+      end
+
+      [] of Method
+    end
   end
 end

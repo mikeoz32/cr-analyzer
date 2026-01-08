@@ -10,6 +10,8 @@ module CRA
     alias LocationLinks = Array(LocationLink)
     alias DocumentSymbols = Array(DocumentSymbol)
     alias SymbolInformations = Array(SymbolInformation)
+    alias DocumentHighlights = Array(DocumentHighlight)
+    alias SelectionRanges = Array(SelectionRange)
     alias TextEdits = Array(TextEdit | AnnotatedTextEdit | SnippetTextEdit)
 
     # ---- Completion trigger kinds ----
@@ -126,6 +128,8 @@ module CRA
         "completionItem/resolve"    => CompletionItemResolveRequest,
         "textDocument/hover"        => HoverRequest,
         "textDocument/signatureHelp" => SignatureHelpRequest,
+        "textDocument/documentHighlight" => DocumentHighlightRequest,
+        "textDocument/selectionRange" => SelectionRangeRequest,
         "textDocument/definition"   => DefinitionRequest,
         "textDocument/references"   => ReferencesRequest,
         "textDocument/documentSymbol" => DocumentSymbolRequest,
@@ -208,7 +212,7 @@ module CRA
     # results are captured via JSON::Any.
     alias DefinitionResult = Location | Locations | LocationLinks
     alias ReferencesResult = Array(Location)
-    alias ResponseResult = InitializeResult | CompletionList | CompletionItem | Hover | SignatureHelp | DefinitionResult | ReferencesResult | DocumentSymbols | SymbolInformations | WorkspaceEdit | TextEdits | DocumentDiagnosticReport | WorkspaceDiagnosticReport | MessageActionItem | JSON::Any
+    alias ResponseResult = InitializeResult | CompletionList | CompletionItem | Hover | SignatureHelp | DefinitionResult | ReferencesResult | DocumentSymbols | SymbolInformations | DocumentHighlights | SelectionRanges | WorkspaceEdit | TextEdits | DocumentDiagnosticReport | WorkspaceDiagnosticReport | MessageActionItem | JSON::Any
 
     class Response < Message
       include JSON::Serializable
@@ -2072,6 +2076,8 @@ module CRA
       property implementation_provider : Bool?
       @[JSON::Field(key: "signatureHelpProvider")]
       property signature_help_provider : SignatureHelpOptions?
+      @[JSON::Field(key: "documentHighlightProvider")]
+      property document_highlight_provider : Bool?
       @[JSON::Field(key: "documentFormattingProvider")]
       property document_formatting_provider : Bool?
       @[JSON::Field(key: "documentRangeFormattingProvider")]
@@ -2124,6 +2130,7 @@ module CRA
                      @type_definition_provider : Bool? = nil,
                      @implementation_provider : Bool? = nil,
                      @signature_help_provider : SignatureHelpOptions? = nil,
+                     @document_highlight_provider : Bool? = nil,
                      @document_formatting_provider : Bool? = nil,
                      @document_range_formatting_provider : Bool? = nil,
                      @rename_provider : Bool | RenameOptions | Nil = nil,
@@ -2885,6 +2892,22 @@ module CRA
 
       @[JSON::Field(nested: "params", key: "position")]
       property position : Position
+    end
+
+    class DocumentHighlightRequest < Request
+      @[JSON::Field(nested: "params", key: "textDocument")]
+      property text_document : TextDocumentIdentifier
+
+      @[JSON::Field(nested: "params", key: "position")]
+      property position : Position
+    end
+
+    class SelectionRangeRequest < Request
+      @[JSON::Field(nested: "params", key: "textDocument")]
+      property text_document : TextDocumentIdentifier
+
+      @[JSON::Field(nested: "params", key: "positions")]
+      property positions : Array(Position)
     end
 
     class DefinitionRequest < Request

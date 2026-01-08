@@ -69,6 +69,40 @@ module CRA
         nil
       end
 
+      def handle(request : Types::SignatureHelpRequest)
+        Log.error { "Handling signature help request" }
+        @workspace.try do |ws|
+          signature_help = ws.signature_help(request)
+          return Types::Response.new(request.id, signature_help) if signature_help
+        end
+        Types::Response.new(request.id, nil)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
+      def handle(request : Types::DocumentHighlightRequest)
+        Log.error { "Handling document highlight request" }
+        @workspace.try do |ws|
+          return Types::Response.new(request.id, ws.document_highlights(request))
+        end
+        Types::Response.new(request.id, [] of Types::DocumentHighlight)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
+      def handle(request : Types::SelectionRangeRequest)
+        Log.error { "Handling selection range request" }
+        @workspace.try do |ws|
+          return Types::Response.new(request.id, ws.selection_ranges(request))
+        end
+        Types::Response.new(request.id, [] of Types::SelectionRange)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
       def handle(request : Types::InitializedNotification)
         Log.info { "Client initialized" }
         nil
@@ -180,10 +214,13 @@ module CRA
             workspace_symbol_provider: true,
             type_definition_provider: true,
             implementation_provider: true,
+            signature_help_provider: Types::SignatureHelpOptions.new(trigger_characters: ["(", ","]),
+            document_highlight_provider: true,
             document_formatting_provider: false,
             document_range_formatting_provider: false,
             rename_provider: true,
-            completion_provider: Types::CompletionOptions.new(resolve_provider: true, trigger_characters: [".", ":", "@", "#", "<", "\"", "'", "/", " "])
+            completion_provider: Types::CompletionOptions.new(resolve_provider: true, trigger_characters: [".", ":", "@", "#", "<", "\"", "'", "/", " "]),
+            selection_range_provider: true
           )
         ))
       rescue ex

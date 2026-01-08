@@ -271,6 +271,83 @@ module CRA
       Types::Hover.new(hover_contents(definitions), node.range)
     end
 
+    def signature_help(request : Types::SignatureHelpRequest) : Types::SignatureHelp?
+      document = document(request.text_document.uri)
+      return nil unless document
+
+      finder = document.node_context(request.position)
+      call = call_for_signature_help(finder)
+      return nil unless call
+
+      cursor = finder.cursor_location
+      return nil unless cursor && cursor_in_call?(call, cursor)
+
+      methods = @analyzer.signature_help_methods(
+        call,
+        finder.enclosing_type_name,
+        finder.enclosing_def,
+        finder.enclosing_class,
+        cursor
+      )
+      return nil if methods.empty?
+
+      signatures = [] of Types::SignatureInformation
+      signature_methods = [] of Psi::Method
+      seen = {} of String => Bool
+
+      methods.each do |method|
+        label = hover_signature(method)
+        next if seen[label]?
+        seen[label] = true
+
+        parameters = method.parameters.map { |param| Types::ParameterInformation.new(JSON::Any.new(param)) }
+        signatures << Types::SignatureInformation.new(label, signature_documentation(method), parameters)
+        signature_methods << method
+      end
+      return nil if signatures.empty?
+
+      active_signature = active_signature_index(signature_methods, call)
+      active_signature = 0 if active_signature.nil?
+      active_method = signature_methods[active_signature]? || signature_methods.first?
+      active_parameter = active_method ? active_parameter_index(call, cursor, active_method.parameters) : nil
+
+      Types::SignatureHelp.new(signatures, active_signature, active_parameter)
+    end
+
+    def document_highlights(request : Types::DocumentHighlightRequest) : Array(Types::DocumentHighlight)
+      document = document(request.text_document.uri)
+      return [] of Types::DocumentHighlight unless document
+
+      finder = document.node_context(request.position)
+      node = finder.node || finder.previous_node
+      return [] of Types::DocumentHighlight unless node
+
+      case node
+      when Crystal::Var
+        highlights_for_local(node.name, finder.enclosing_def)
+      when Crystal::Arg
+        highlights_for_local(node.name, finder.enclosing_def)
+      when Crystal::InstanceVar
+        highlights_for_instance_var(node.name, finder.enclosing_class)
+      when Crystal::ClassVar
+        highlights_for_class_var(node.name, finder.enclosing_class)
+      when Crystal::Path
+        highlights_for_path(node, document.program)
+      else
+        [] of Types::DocumentHighlight
+      end
+    end
+
+    def selection_ranges(request : Types::SelectionRangeRequest) : Array(Types::SelectionRange)
+      document = document(request.text_document.uri)
+      return [] of Types::SelectionRange unless document
+
+      request.positions.map do |position|
+        finder = document.node_context(position)
+        selection_range_for_path(finder.context_path, position)
+      end
+    end
+
     private def hover_contents(definitions : Array(Psi::PsiElement)) : JSON::Any
       sections = [] of String
       seen = {} of String => Bool
@@ -353,6 +430,406 @@ module CRA
       else
         definition.name
       end
+    end
+
+    private def signature_documentation(method : Psi::Method) : JSON::Any?
+      doc = method.doc.try(&.strip)
+      return nil unless doc && !doc.empty?
+
+      JSON::Any.new({
+        "kind" => JSON::Any.new("markdown"),
+        "value" => JSON::Any.new(doc),
+      })
+    end
+
+    private def active_signature_index(methods : Array(Psi::Method), call : Crystal::Call) : Int32?
+      arity = call_arity(call)
+      methods.each_with_index do |method, idx|
+        next if arity < method.min_arity
+        max = method.max_arity
+        next if max && arity > max
+        return idx
+      end
+      nil
+    end
+
+    private def call_arity(call : Crystal::Call) : Int32
+      call.args.size + (call.named_args.try(&.size) || 0)
+    end
+
+    private def active_parameter_index(
+      call : Crystal::Call,
+      cursor : Crystal::Location,
+      parameters : Array(String)
+    ) : Int32?
+      named_args = call.named_args || [] of Crystal::NamedArgument
+      named_args.each_with_index do |named, idx|
+        if cursor_in_node_range?(cursor, named)
+          if param_index = parameters.index(named.name)
+            return clamp_parameter_index(param_index, parameters)
+          end
+          return clamp_parameter_index(call.args.size + idx, parameters)
+        end
+      end
+
+      call.args.each_with_index do |arg, idx|
+        return clamp_parameter_index(idx, parameters) if cursor_in_node_range?(cursor, arg)
+      end
+
+      index = count_args_before_cursor(call, named_args, cursor)
+      return clamp_parameter_index(index, parameters)
+    end
+
+    private def clamp_parameter_index(index : Int32, parameters : Array(String)) : Int32?
+      return nil if parameters.empty?
+      max_index = parameters.size - 1
+      index = max_index if index > max_index
+      index
+    end
+
+    private def count_args_before_cursor(
+      call : Crystal::Call,
+      named_args : Array(Crystal::NamedArgument),
+      cursor : Crystal::Location
+    ) : Int32
+      index = 0
+      call.args.each do |arg|
+        end_loc = arg.end_location || arg.location
+        next unless end_loc
+        index += 1 if location_before_or_equal?(end_loc, cursor)
+      end
+      named_args.each do |named|
+        end_loc = named.end_location || named.location
+        next unless end_loc
+        index += 1 if location_before_or_equal?(end_loc, cursor)
+      end
+      index
+    end
+
+    private def call_for_signature_help(finder : NodeFinder) : Crystal::Call?
+      if call = finder.node.as?(Crystal::Call)
+        return call
+      end
+      if call = finder.previous_node.as?(Crystal::Call)
+        return call
+      end
+
+      finder.context_path.reverse_each do |node|
+        if call = node.as?(Crystal::Call)
+          return call
+        end
+      end
+      nil
+    end
+
+    private def cursor_in_call?(call : Crystal::Call, cursor : Crystal::Location) : Bool
+      return false unless call.has_parentheses? || call.has_any_args?
+
+      start_loc = call.name_end_location || call.name_location || call.location
+      return false unless start_loc
+      end_loc = call.end_location || call.location
+      return false unless end_loc
+
+      location_after_or_equal?(cursor, start_loc) && location_before_or_equal?(cursor, end_loc)
+    end
+
+    private def cursor_in_node_range?(cursor : Crystal::Location, node : Crystal::ASTNode) : Bool
+      start_loc = node.location
+      return false unless start_loc
+      end_loc = node.end_location || node.location
+      return false unless end_loc
+
+      location_after_or_equal?(cursor, start_loc) && location_before_or_equal?(cursor, end_loc)
+    end
+
+    private def location_before_or_equal?(left : Crystal::Location, right : Crystal::Location) : Bool
+      left.line_number < right.line_number ||
+        (left.line_number == right.line_number && left.column_number <= right.column_number)
+    end
+
+    private def location_after_or_equal?(left : Crystal::Location, right : Crystal::Location) : Bool
+      left.line_number > right.line_number ||
+        (left.line_number == right.line_number && left.column_number >= right.column_number)
+    end
+
+    private def highlights_for_local(name : String, scope_def : Crystal::Def?) : Array(Types::DocumentHighlight)
+      return [] of Types::DocumentHighlight unless scope_def
+
+      nodes = [] of Crystal::ASTNode
+      scope_def.args.each do |arg|
+        nodes << arg if arg.name == name
+      end
+
+      collector = LocalVarHighlightCollector.new(name)
+      scope_def.body.accept(collector)
+      nodes.concat(collector.nodes)
+
+      document_highlights_for(nodes)
+    end
+
+    private def highlights_for_instance_var(name : String, scope_class : Crystal::ClassDef?) : Array(Types::DocumentHighlight)
+      return [] of Types::DocumentHighlight unless scope_class
+
+      collector = InstanceVarHighlightCollector.new(name)
+      scope_class.body.accept(collector)
+      document_highlights_for(collector.nodes)
+    end
+
+    private def highlights_for_class_var(name : String, scope_class : Crystal::ClassDef?) : Array(Types::DocumentHighlight)
+      return [] of Types::DocumentHighlight unless scope_class
+
+      collector = ClassVarHighlightCollector.new(name)
+      scope_class.body.accept(collector)
+      document_highlights_for(collector.nodes)
+    end
+
+    private def highlights_for_path(path : Crystal::Path, program : Crystal::ASTNode?) : Array(Types::DocumentHighlight)
+      return [] of Types::DocumentHighlight unless program
+
+      collector = PathHighlightCollector.new(path.full, path.global?)
+      program.accept(collector)
+      document_highlights_for(collector.nodes)
+    end
+
+    private def document_highlights_for(nodes : Array(Crystal::ASTNode)) : Array(Types::DocumentHighlight)
+      highlights = [] of Types::DocumentHighlight
+      seen = {} of String => Bool
+
+      nodes.each do |node|
+        range = node_name_range(node) || node_range(node)
+        next unless range
+        key = "#{range.start_position.line}:#{range.start_position.character}:#{range.end_position.line}:#{range.end_position.character}"
+        next if seen[key]?
+        seen[key] = true
+        highlights << Types::DocumentHighlight.new(range)
+      end
+
+      highlights
+    end
+
+    private def selection_range_for_path(path : Array(Crystal::ASTNode), position : Types::Position) : Types::SelectionRange
+      ranges = [] of Types::Range
+      path.each do |node|
+        if range = node_range(node)
+          ranges << range
+        end
+      end
+
+      if leaf = path.last?
+        if name_range = node_name_range(leaf)
+          if leaf_range = ranges.last?
+            unless ranges_equal?(leaf_range, name_range)
+              ranges << name_range
+            end
+          else
+            ranges << name_range
+          end
+        end
+      end
+
+      if ranges.empty?
+        fallback = Types::Range.new(
+          start_position: position,
+          end_position: position
+        )
+        return Types::SelectionRange.new(fallback)
+      end
+
+      parent : Types::SelectionRange? = nil
+      ranges.each do |range|
+        parent = Types::SelectionRange.new(range, parent)
+      end
+      parent.not_nil!
+    end
+
+    private def node_range(node : Crystal::ASTNode) : Types::Range?
+      start_loc = node.location
+      return nil unless start_loc
+      end_loc = node.end_location || start_loc
+
+      Types::Range.new(
+        start_position: Types::Position.new(line: start_loc.line_number - 1, character: start_loc.column_number - 1),
+        end_position: Types::Position.new(line: end_loc.line_number - 1, character: end_loc.column_number)
+      )
+    end
+
+    private def node_name_range(node : Crystal::ASTNode) : Types::Range?
+      case node
+      when Crystal::Call
+        loc = node.name_location || node.location
+        return nil unless loc
+        range_from_location_and_size(loc, node.name_size)
+      when Crystal::Var
+        loc = node.location
+        return nil unless loc
+        range_from_location_and_size(loc, node.name_size)
+      when Crystal::Arg
+        loc = node.location
+        return nil unless loc
+        range_from_location_and_size(loc, node.name_size)
+      when Crystal::InstanceVar
+        loc = node.location
+        return nil unless loc
+        range_from_location_and_size(loc, node.name_size)
+      when Crystal::ClassVar
+        loc = node.location
+        return nil unless loc
+        range_from_location_and_size(loc, node.name.size)
+      when Crystal::Path
+        loc = node.location
+        return nil unless loc
+        range_from_location_and_size(loc, node.name_size)
+      else
+        nil
+      end
+    end
+
+    private def range_from_location_and_size(loc : Crystal::Location, size : Int32) : Types::Range
+      start_line = loc.line_number - 1
+      start_char = loc.column_number - 1
+      end_char = start_char + size
+      Types::Range.new(
+        start_position: Types::Position.new(line: start_line, character: start_char),
+        end_position: Types::Position.new(line: start_line, character: end_char)
+      )
+    end
+
+    private def ranges_equal?(left : Types::Range, right : Types::Range) : Bool
+      left.start_position.line == right.start_position.line &&
+        left.start_position.character == right.start_position.character &&
+        left.end_position.line == right.end_position.line &&
+        left.end_position.character == right.end_position.character
+    end
+  end
+
+  class LocalVarHighlightCollector < Crystal::Visitor
+    getter nodes : Array(Crystal::ASTNode)
+
+    def initialize(@name : String)
+      @nodes = [] of Crystal::ASTNode
+    end
+
+    def visit(node : Crystal::ASTNode) : Bool
+      true
+    end
+
+    def visit(node : Crystal::Var) : Bool
+      @nodes << node if node.name == @name
+      true
+    end
+
+    def visit(node : Crystal::Arg) : Bool
+      @nodes << node if node.name == @name
+      true
+    end
+
+    def visit(node : Crystal::Def) : Bool
+      false
+    end
+
+    def visit(node : Crystal::ClassDef) : Bool
+      false
+    end
+
+    def visit(node : Crystal::ModuleDef) : Bool
+      false
+    end
+
+    def visit(node : Crystal::EnumDef) : Bool
+      false
+    end
+
+    def visit(node : Crystal::Macro) : Bool
+      false
+    end
+  end
+
+  class InstanceVarHighlightCollector < Crystal::Visitor
+    getter nodes : Array(Crystal::ASTNode)
+
+    def initialize(@name : String)
+      @nodes = [] of Crystal::ASTNode
+    end
+
+    def visit(node : Crystal::ASTNode) : Bool
+      true
+    end
+
+    def visit(node : Crystal::InstanceVar) : Bool
+      @nodes << node if node.name == @name
+      true
+    end
+
+    def visit(node : Crystal::ClassDef) : Bool
+      false
+    end
+
+    def visit(node : Crystal::ModuleDef) : Bool
+      false
+    end
+
+    def visit(node : Crystal::EnumDef) : Bool
+      false
+    end
+
+    def visit(node : Crystal::Macro) : Bool
+      false
+    end
+  end
+
+  class ClassVarHighlightCollector < Crystal::Visitor
+    getter nodes : Array(Crystal::ASTNode)
+
+    def initialize(@name : String)
+      @nodes = [] of Crystal::ASTNode
+    end
+
+    def visit(node : Crystal::ASTNode) : Bool
+      true
+    end
+
+    def visit(node : Crystal::ClassVar) : Bool
+      @nodes << node if node.name == @name
+      true
+    end
+
+    def visit(node : Crystal::ClassDef) : Bool
+      false
+    end
+
+    def visit(node : Crystal::ModuleDef) : Bool
+      false
+    end
+
+    def visit(node : Crystal::EnumDef) : Bool
+      false
+    end
+
+    def visit(node : Crystal::Macro) : Bool
+      false
+    end
+  end
+
+  class PathHighlightCollector < Crystal::Visitor
+    getter nodes : Array(Crystal::ASTNode)
+
+    def initialize(@full_name : String, @global : Bool)
+      @nodes = [] of Crystal::ASTNode
+    end
+
+    def visit(node : Crystal::ASTNode) : Bool
+      true
+    end
+
+    def visit(node : Crystal::Path) : Bool
+      if node.full == @full_name && node.global? == @global
+        @nodes << node
+      end
+      true
+    end
+
+    def visit(node : Crystal::Macro) : Bool
+      false
     end
   end
 end
