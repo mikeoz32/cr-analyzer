@@ -79,7 +79,12 @@ module CRA::Psi
     class TypeCollector < Crystal::Visitor
       include TypeRefHelper
 
-      def initialize(@env : TypeEnv, @cursor : Crystal::Location?, @collect_locals : Bool)
+      def initialize(
+        @env : TypeEnv,
+        @cursor : Crystal::Location?,
+        @collect_locals : Bool,
+        @fill_only : Bool = false
+      )
       end
 
       def visit(node : Crystal::ASTNode) : Bool
@@ -96,6 +101,27 @@ module CRA::Psi
       end
 
       def visit(node : Crystal::Assign) : Bool
+        return false unless before_cursor?(node)
+
+        if type_ref = type_ref_from_value(node.value)
+          assign_type(node.target, type_ref)
+        else
+          type_ref = case value = node.value
+                     when Crystal::Var
+                       @env.locals[value.name]?
+                     when Crystal::InstanceVar
+                       @env.ivars[value.name]?
+                     when Crystal::ClassVar
+                       @env.cvars[value.name]?
+                     else
+                       nil
+                     end
+          assign_type(node.target, type_ref) if type_ref
+        end
+        true
+      end
+
+      def visit(node : Crystal::OpAssign) : Bool
         return false unless before_cursor?(node)
 
         if type_ref = type_ref_from_value(node.value)
@@ -144,10 +170,13 @@ module CRA::Psi
         case target
         when Crystal::Var
           return unless @collect_locals
+          return if @fill_only && @env.locals.has_key?(target.name)
           @env.locals[target.name] = type_ref
         when Crystal::InstanceVar
+          return if @fill_only && @env.ivars.has_key?(target.name)
           @env.ivars[target.name] = type_ref
         when Crystal::ClassVar
+          return if @fill_only && @env.cvars.has_key?(target.name)
           @env.cvars[target.name] = type_ref
         end
       end
@@ -183,6 +212,37 @@ module CRA::Psi
       end
 
       def visit(node : Crystal::ModuleDef) : Bool
+        false
+      end
+
+      def visit(node : Crystal::Macro) : Bool
+        false
+      end
+    end
+
+    # Collects instance/class variable assignments from all method bodies in a class.
+    class DefIvarCollector < Crystal::Visitor
+      def initialize(@collector : TypeCollector)
+      end
+
+      def visit(node : Crystal::ASTNode) : Bool
+        true
+      end
+
+      def visit(node : Crystal::Def) : Bool
+        node.body.accept(@collector)
+        false
+      end
+
+      def visit(node : Crystal::ClassDef) : Bool
+        false
+      end
+
+      def visit(node : Crystal::ModuleDef) : Bool
+        false
+      end
+
+      def visit(node : Crystal::EnumDef) : Bool
         false
       end
 
@@ -453,9 +513,11 @@ module CRA::Psi
       name : String,
       owner : CRA::Psi::Module?,
       location : Location?,
-      type_vars : Array(String) = [] of String
+      type_vars : Array(String) = [] of String,
+      doc : String? = nil
     ) : CRA::Psi::Module
       if found = find_module(name)
+        assign_doc(found, doc)
         record_type_definition(name, :module, location, found, type_vars)
         return found
       end
@@ -465,7 +527,8 @@ module CRA::Psi
         classes: [] of CRA::Psi::Class,
         methods: [] of CRA::Psi::Method,
         owner: owner,
-        location: location
+        location: location,
+        doc: doc
       )
       record_type_definition(name, :module, location, module_element, type_vars)
       attach module_element, owner
@@ -476,9 +539,11 @@ module CRA::Psi
       name : String,
       owner : CRA::Psi::PsiElement | Nil,
       location : Location?,
-      type_vars : Array(String) = [] of String
+      type_vars : Array(String) = [] of String,
+      doc : String? = nil
     ) : CRA::Psi::Class
       if found = find_class(name)
+        assign_doc(found, doc)
         record_type_definition(name, :class, location, found, type_vars)
         return found
       end
@@ -486,15 +551,22 @@ module CRA::Psi
         file: @current_file,
         name: name,
         owner: owner,
-        location: location
+        location: location,
+        doc: doc
       )
       record_type_definition(name, :class, location, class_element, type_vars)
       attach class_element, owner
       class_element
     end
 
-    def ensure_enum(name : String, owner : CRA::Psi::PsiElement | Nil, location : Location?) : CRA::Psi::Enum
+    def ensure_enum(
+      name : String,
+      owner : CRA::Psi::PsiElement | Nil,
+      location : Location?,
+      doc : String? = nil
+    ) : CRA::Psi::Enum
       if found = find_enum(name)
+        assign_doc(found, doc)
         record_type_definition(name, :enum, location, found, [] of String)
         return found
       end
@@ -504,7 +576,8 @@ module CRA::Psi
         members: [] of CRA::Psi::EnumMember,
         methods: [] of CRA::Psi::Method,
         owner: owner,
-        location: location
+        location: location,
+        doc: doc
       )
       record_type_definition(name, :enum, location, enum_element, [] of String)
       attach enum_element, owner
@@ -705,7 +778,13 @@ module CRA::Psi
       end
     end
 
-    def record_alias(name : String, target : TypeRef?, location : Location?)
+    private def assign_doc(element : PsiElement, doc : String?)
+      return if doc.nil? || doc.empty?
+      return if element.doc
+      element.doc = doc
+    end
+
+    def record_alias(name : String, target : TypeRef?, location : Location?, doc : String? = nil)
       file = @current_file
       return unless file
 
@@ -713,7 +792,8 @@ module CRA::Psi
         file: file,
         name: name,
         target: target,
-        location: location
+        location: location,
+        doc: doc
       )
 
       defs = (@aliases_by_name[name] ||= {} of String => CRA::Psi::Alias)
@@ -1329,6 +1409,8 @@ module CRA::Psi
         scope_class.body.accept(TypeCollector.new(env, nil, false))
         # Also consider ivars initialized in initialize.
         scope_class.body.accept(InitializeCollector.new(TypeCollector.new(env, nil, false)))
+        # Fill missing ivars/cvars from other method bodies (best-effort).
+        scope_class.body.accept(DefIvarCollector.new(TypeCollector.new(env, nil, false, true)))
       end
       if scope_def
         scope_def.args.each do |arg|
@@ -1555,7 +1637,7 @@ module CRA::Psi
       CRA::Types::CompletionItemKind::Class
     end
 
-    private def type_signature_for(full_name : String) : String
+    def type_signature_for(full_name : String) : String
       if alias_def = find_alias(full_name)
         if target = alias_def.target
           return "alias #{full_name} = #{target.display}"

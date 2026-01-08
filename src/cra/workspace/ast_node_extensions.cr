@@ -21,6 +21,8 @@ class Crystal::ASTNode
       CRA::Types::SymbolKind::Module
     when Crystal::ClassDef
       CRA::Types::SymbolKind::Class
+    when Crystal::EnumDef
+      CRA::Types::SymbolKind::Enum
     when Crystal::Def
       CRA::Types::SymbolKind::Method
     when Crystal::InstanceVar

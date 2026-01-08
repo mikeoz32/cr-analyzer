@@ -96,8 +96,9 @@ module CRA
     end
 
     private def index_file(file_path : String)
-      lex = Crystal::Parser.new(File.read(file_path))
-      program = lex.parse
+      parser = Crystal::Parser.new(File.read(file_path))
+      parser.wants_doc = true
+      program = parser.parse
       indexer.enter("file://#{file_path}")
       @analyzer.enter("file://#{file_path}")
       program.accept(indexer)
@@ -112,7 +113,11 @@ module CRA
       return reindexed unless File.exists?(path) || program
 
       old_types = @analyzer.type_names_for_file(uri)
-      program ||= Crystal::Parser.new(File.read(path)).parse
+      if program.nil?
+        parser = Crystal::Parser.new(File.read(path))
+        parser.wants_doc = true
+        program = parser.parse
+      end
 
       @analyzer.remove_file(uri)
       @analyzer.enter(uri)
@@ -133,7 +138,9 @@ module CRA
         next unless File.exists?(dep_path)
 
         begin
-          dep_program = Crystal::Parser.new(File.read(dep_path)).parse
+          dep_parser = Crystal::Parser.new(File.read(dep_path))
+          dep_parser.wants_doc = true
+          dep_program = dep_parser.parse
         rescue ex : Exception
           Log.error { "Error parsing #{dep_path}: #{ex.message}" }
           next
@@ -219,6 +226,93 @@ module CRA
         end
       end
       [] of Types::Location
+    end
+
+    def hover(request : Types::HoverRequest) : Types::Hover?
+      document = document(request.text_document.uri)
+      return nil unless document
+
+      finder = document.node_context(request.position)
+      node = finder.node || finder.previous_node
+      return nil unless node
+
+      definitions = @analyzer.find_definitions(
+        node,
+        finder.enclosing_type_name,
+        finder.enclosing_def,
+        finder.enclosing_class,
+        finder.cursor_location,
+        request.text_document.uri
+      )
+      return nil if definitions.empty?
+
+      Types::Hover.new(hover_contents(definitions), node.range)
+    end
+
+    private def hover_contents(definitions : Array(Psi::PsiElement)) : JSON::Any
+      sections = [] of String
+      seen = {} of String => Bool
+
+      definitions.each do |definition|
+        section = hover_section(definition)
+        next if seen[section]?
+        seen[section] = true
+        sections << section
+      end
+
+      value = sections.join("\n\n---\n\n")
+      JSON::Any.new({
+        "kind" => JSON::Any.new("markdown"),
+        "value" => JSON::Any.new(value),
+      })
+    end
+
+    private def hover_section(definition : Psi::PsiElement) : String
+      signature = hover_signature(definition)
+      content = "```crystal\n#{signature}\n```"
+
+      if doc = definition.doc
+        doc = doc.strip
+        content += "\n\n#{doc}" unless doc.empty?
+      end
+      content
+    end
+
+    private def hover_signature(definition : Psi::PsiElement) : String
+      case definition
+      when Psi::Method
+        owner_name = definition.owner.try(&.name) || "self"
+        separator = definition.class_method ? "." : "#"
+        params = definition.parameters.join(", ")
+        signature = "def #{owner_name}#{separator}#{definition.name}"
+        signature += "(#{params})" unless params.empty?
+        if definition.return_type_ref
+          signature += " : #{definition.return_type}"
+        end
+        signature
+      when Psi::Class
+        "class #{@analyzer.type_signature_for(definition.name)}"
+      when Psi::Module
+        "module #{@analyzer.type_signature_for(definition.name)}"
+      when Psi::Enum
+        "enum #{@analyzer.type_signature_for(definition.name)}"
+      when Psi::Alias
+        if target = definition.target
+          "alias #{definition.name} = #{target.display}"
+        else
+          "alias #{definition.name}"
+        end
+      when Psi::EnumMember
+        "#{definition.owner.name}::#{definition.name}"
+      when Psi::InstanceVar
+        type_name = definition.type.empty? ? "Unknown" : definition.type
+        "#{definition.name} : #{type_name}"
+      when Psi::ClassVar
+        type_name = definition.type.empty? ? "Unknown" : definition.type
+        "#{definition.name} : #{type_name}"
+      else
+        definition.name
+      end
     end
   end
 end

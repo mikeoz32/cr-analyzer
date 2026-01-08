@@ -12,8 +12,9 @@ The server runs over stdio (stdin/stdout) and uses JSON-RPC.
 - textDocument/didSave (full text)
 - textDocument/completion
 - textDocument/definition
+- textDocument/hover
 
-Document symbols are implemented in DocumentSymbolsIndex but not advertised in capabilities yet.
+Document symbols are implemented in DocumentSymbolsIndex and advertised in capabilities.
 
 ## Capabilities status
 

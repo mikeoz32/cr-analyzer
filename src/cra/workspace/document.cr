@@ -51,8 +51,9 @@ module CRA
     end
 
     private def parse(text : String)
-      lexer = Crystal::Parser.new(text)
-      @program = lexer.parse
+      parser = Crystal::Parser.new(text)
+      parser.wants_doc = true
+      @program = parser.parse
     end
 
     private def apply_range_change(range : Types::Range, new_text : String)

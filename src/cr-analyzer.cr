@@ -45,6 +45,18 @@ module CRA
         nil
       end
 
+      def handle(request : Types::HoverRequest)
+        Log.error { "Handling hover request" }
+        @workspace.try do |ws|
+          hover = ws.hover(request)
+          return Types::Response.new(request.id, hover) if hover
+        end
+        Types::Response.new(request.id, nil)
+      rescue ex
+        Log.error { "Error handling request: #{ex.message}" }
+        nil
+      end
+
       def handle(request : Types::InitializedNotification)
         Log.info { "Client initialized" }
         nil
@@ -149,8 +161,9 @@ module CRA
               change: Types::TextDocumentSyncKind::Full,
               save: Types::SaveOptions.new(include_text: true)
             ),
-            document_symbol_provider: false,
+            document_symbol_provider: true,
             definition_provider: true,
+            hover_provider: true,
             references_provider: true,
             workspace_symbol_provider: true,
             type_definition_provider: true,

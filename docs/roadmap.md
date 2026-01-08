@@ -19,12 +19,12 @@ Legend:
 - [ ] Document Highlight
 - [ ] Document Link
 - [ ] Document Link Resolve
-- [ ] Hover
+- [x] Hover
 - [ ] Code Lens
 - [ ] Code Lens Refresh
 - [ ] Folding Range
 - [ ] Selection Range
-- [~] Document Symbols (index exists, not advertised yet)
+- [x] Document Symbols
 - [ ] Semantic Tokens
 - [ ] Inline Value
 - [ ] Inline Value Refresh

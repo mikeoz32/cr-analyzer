@@ -7,16 +7,18 @@ module CRA
     include CompletionProvider
 
     @current_uri : String?
-    @container : String?
+    @container_stack : Array(String)
     def initialize
       # Document uri to symbols mapping
       @symbols = {} of String => Array(Types::SymbolInformation)
       @current_uri = nil
+      @container_stack = [] of String
     end
 
     def enter(uri : String)
       @current_uri = uri
       @symbols[uri] = [] of Types::SymbolInformation
+      @container_stack.clear
     end
 
     def visit(node : Crystal::ASTNode) : Bool
@@ -29,32 +31,42 @@ module CRA
     end
 
     def visit(node : Crystal::ModuleDef) : Bool
-      symbol node.to_symbol_info(@current_uri, @container)
-      @container = node.name.to_s
+      symbol node.to_symbol_info(@current_uri, current_container)
+      push_container(node.name.to_s)
       node.accept_children(self)
+      @container_stack.pop
       false
     end
 
     def visit(node : Crystal::Def) : Bool
+      symbol node.to_symbol_info(@current_uri, current_container)
       node.accept_children(self)
-      symbol node.to_symbol_info(@current_uri, @container)
       false
     end
 
     def visit(node : Crystal::ClassDef) : Bool
+      symbol node.to_symbol_info(@current_uri, current_container)
+      push_container(node.name.to_s)
       node.accept_children(self)
-      symbol node.to_symbol_info(@current_uri, @container)
-      @current_parent = node.name.to_s
+      @container_stack.pop
+      false
+    end
+
+    def visit(node : Crystal::EnumDef) : Bool
+      symbol node.to_symbol_info(@current_uri, current_container)
+      push_container(node.name.to_s)
+      node.accept_children(self)
+      @container_stack.pop
       false
     end
 
     def visit(node : Crystal::VarDef) : Bool
-      symbol node.to_symbol_info(@current_uri, @container)
+      symbol node.to_symbol_info(@current_uri, current_container)
       false
     end
 
     def visit(node : Crystal::InstanceVar) : Bool
-      symbol node.to_symbol_info(@current_uri, @container)
+      symbol node.to_symbol_info(@current_uri, current_container)
       false
     end
 
@@ -104,6 +116,20 @@ module CRA
         @symbols[@current_uri] << symbol
       else
         raise "You must call enter(uri) before adding symbols"
+      end
+    end
+
+    private def current_container : String?
+      @container_stack.last?
+    end
+
+    private def push_container(name : String)
+      if name.includes?("::")
+        @container_stack << name
+      elsif parent = @container_stack.last?
+        @container_stack << "#{parent}::#{name}"
+      else
+        @container_stack << name
       end
     end
   end

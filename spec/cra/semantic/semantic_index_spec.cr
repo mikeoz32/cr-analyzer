@@ -793,6 +793,52 @@ describe CRA::Psi::SemanticIndex do
     defs_string_at.first.as(CRA::Psi::Method).owner.not_nil!.name.should eq("StringBuffer")
   end
 
+  it "resolves method definitions from ivars assigned in other methods" do
+    code = <<-CRYSTAL
+      class Client
+        def request
+        end
+      end
+
+      class Service
+        private def prepare
+          @client = Client.new
+        end
+
+        def call
+          prepare
+          @client.request
+        end
+      end
+    CRYSTAL
+
+    index, node = build_index(code)
+
+    call_request = find_first(node) do |n|
+      n.is_a?(Crystal::Call) && n.name == "request"
+    end
+    call_request.should_not be_nil
+    call_node = call_request.not_nil!
+
+    def_call = find_first(node) do |n|
+      n.is_a?(Crystal::Def) && n.name == "call"
+    end
+    def_call.should_not be_nil
+    def_node = def_call.not_nil!.as(Crystal::Def)
+
+    class_service = find_first(node) do |n|
+      n.is_a?(Crystal::ClassDef) && n.name.full == "Service"
+    end
+    class_service.should_not be_nil
+    class_node = class_service.not_nil!.as(Crystal::ClassDef)
+
+    defs_request = index.find_definitions(call_node, "Service", def_node, class_node, call_node.location)
+    defs_request.size.should eq(1)
+    defs_request.first.should be_a(CRA::Psi::Method)
+    defs_request.first.name.should eq("request")
+    defs_request.first.as(CRA::Psi::Method).owner.not_nil!.name.should eq("Client")
+  end
+
   it "resolves instance methods from superclass" do
     code = <<-CRYSTAL
       class Base

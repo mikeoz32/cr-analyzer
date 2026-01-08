@@ -60,9 +60,10 @@ module CRA
     class PsiElement
       property file : String?
       property location : Location?
+      property doc : String?
       getter name : String
 
-      def initialize(@file : String?, @name : String, @location : Location? = nil)
+      def initialize(@file : String?, @name : String, @location : Location? = nil, @doc : String? = nil)
       end
     end
 
@@ -70,7 +71,7 @@ module CRA
       getter classes : Array(Class)
       getter methods : Array(Method)
       getter owner : Module?
-      def initialize(@file : String?, @name : String, @classes : Array(Class), @methods : Array(Method), @owner : Module? = nil, @location : Location? = nil)
+      def initialize(@file : String?, @name : String, @classes : Array(Class), @methods : Array(Method), @owner : Module? = nil, @location : Location? = nil, @doc : String? = nil)
       end
     end
 
@@ -91,7 +92,8 @@ module CRA
         @instance_vars : Array(InstanceVar) = [] of InstanceVar,
         @class_vars : Array(ClassVar) = [] of ClassVar,
         @includes : Array(Module) = [] of Module,
-        @location : Location? = nil)
+        @location : Location? = nil,
+        @doc : String? = nil)
       end
     end
 
@@ -113,21 +115,22 @@ module CRA
         @owner : PsiElement | Nil,
         @parameters : Array(String) = [] of String,
         @return_type_ref : TypeRef? = nil,
-        @location : Location? = nil)
+        @location : Location? = nil,
+        @doc : String? = nil)
       end
     end
 
     class InstanceVar < PsiElement
       getter type : String
       getter owner : Class
-      def initialize(@file : String?, @name : String, @type : String, @owner : Class, @location : Location? = nil)
+      def initialize(@file : String?, @name : String, @type : String, @owner : Class, @location : Location? = nil, @doc : String? = nil)
       end
     end
 
     class ClassVar < PsiElement
       getter type : String
       getter owner : Class
-      def initialize(@file : String?, @name : String, @type : String, @owner : Class, @location : Location? = nil)
+      def initialize(@file : String?, @name : String, @type : String, @owner : Class, @location : Location? = nil, @doc : String? = nil)
       end
     end
 
@@ -142,31 +145,32 @@ module CRA
         @members : Array(EnumMember) = [] of EnumMember,
         @methods : Array(Method) = [] of Method,
         @owner : PsiElement | Nil = nil,
-        @location : Location? = nil)
+        @location : Location? = nil,
+        @doc : String? = nil)
       end
     end
 
     class EnumMember < PsiElement
       getter owner : Enum
-      def initialize(@file : String?, @name : String, @owner : Enum, @location : Location? = nil)
+      def initialize(@file : String?, @name : String, @owner : Enum, @location : Location? = nil, @doc : String? = nil)
       end
     end
 
     class LocalVar < PsiElement
       getter owner : PsiElement | Nil
-      def initialize(@file : String?, @name : String, @owner : PsiElement | Nil = nil, @location : Location? = nil)
+      def initialize(@file : String?, @name : String, @owner : PsiElement | Nil = nil, @location : Location? = nil, @doc : String? = nil)
       end
     end
 
     class Alias < PsiElement
       getter target : TypeRef?
-      def initialize(@file : String?, @name : String, @target : TypeRef? = nil, @location : Location? = nil)
+      def initialize(@file : String?, @name : String, @target : TypeRef? = nil, @location : Location? = nil, @doc : String? = nil)
       end
     end
 
     class Annotation < PsiElement
       getter owner : Module | Class
-      def initialize(@file : String?, @name : String, @owner : Module | Class, @location : Location? = nil)
+      def initialize(@file : String?, @name : String, @owner : Module | Class, @location : Location? = nil, @doc : String? = nil)
       end
     end
   end

@@ -31,7 +31,13 @@ module CRA::Psi
           parent = @index.find_module(parent_name, true)
         end
       end
-      module_element = @index.ensure_module(name, parent, @index.location_for(node), node.type_vars || [] of String)
+      module_element = @index.ensure_module(
+        name,
+        parent,
+        @index.location_for(node),
+        node.type_vars || [] of String,
+        node.doc
+      )
       @owner_stack << module_element
       node.accept_children(self)
       @owner_stack.pop
@@ -50,7 +56,13 @@ module CRA::Psi
           end
         end
       end
-      class_element = @index.ensure_class(name, parent, @index.location_for(node), node.type_vars || [] of String)
+      class_element = @index.ensure_class(
+        name,
+        parent,
+        @index.location_for(node),
+        node.type_vars || [] of String,
+        node.doc
+      )
       if superclass = node.superclass
         @index.set_superclass(class_element.name, superclass)
       end
@@ -68,7 +80,7 @@ module CRA::Psi
           parent = @index.find_module(parent_name, true) || @index.find_class(parent_name) || @index.find_enum(parent_name)
         end
       end
-      enum_element = @index.ensure_enum(name, parent, @index.location_for(node))
+      enum_element = @index.ensure_enum(name, parent, @index.location_for(node), node.doc)
       @owner_stack << enum_element
       node.accept_children(self)
       @owner_stack.pop
@@ -144,7 +156,13 @@ module CRA::Psi
           parent = @index.find_module(parent_name, true)
         end
       end
-      module_element = @index.ensure_module(name, parent, @index.location_for(node), node.type_vars || [] of String)
+      module_element = @index.ensure_module(
+        name,
+        parent,
+        @index.location_for(node),
+        node.type_vars || [] of String,
+        node.doc
+      )
       @owner_stack << module_element
       node.accept_children(self)
       @owner_stack.pop
@@ -163,7 +181,13 @@ module CRA::Psi
           end
         end
       end
-      class_element = @index.ensure_class(name, parent, @index.location_for(node), node.type_vars || [] of String)
+      class_element = @index.ensure_class(
+        name,
+        parent,
+        @index.location_for(node),
+        node.type_vars || [] of String,
+        node.doc
+      )
       if superclass = node.superclass
         @index.set_superclass(class_element.name, superclass)
       end
@@ -181,7 +205,7 @@ module CRA::Psi
           parent = @index.find_module(parent_name, true) || @index.find_class(parent_name) || @index.find_enum(parent_name)
         end
       end
-      enum_element = @index.ensure_enum(name, parent, @index.location_for(node))
+      enum_element = @index.ensure_enum(name, parent, @index.location_for(node), node.doc)
 
       node.members.each do |member|
         next unless member.is_a?(Crystal::Arg)
@@ -203,7 +227,7 @@ module CRA::Psi
     def visit(node : Crystal::Alias) : Bool
       name = qualified_name(node.name)
       target = type_ref_from_type(node.value)
-      @index.record_alias(name, target, @index.location_for(node))
+      @index.record_alias(name, target, @index.location_for(node), node.doc)
       false
     end
 
@@ -235,7 +259,8 @@ module CRA::Psi
         return_type: node.return_type ? node.return_type.to_s : "Nil",
         return_type_ref: return_type_ref,
         parameters: node.args.map(&.name),
-        location: @index.location_for(node)
+        location: @index.location_for(node),
+        doc: node.doc
       )
       @index.attach method_element, owner
       false
