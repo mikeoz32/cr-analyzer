@@ -266,6 +266,8 @@ module CRA
       continue_all
 
       def visit(node : Crystal::Def) : Bool
+        return true if node.abstract?
+        return true unless node.body
         args = node.args.reject { |arg| arg.name.starts_with?("_") }
         return true if args.empty?
 

@@ -141,4 +141,81 @@ describe CRA::Workspace do
       defs.size.should eq(0)
     end
   end
+
+  it "tracks created files from watched file notifications" do
+    with_tmpdir do |dir|
+      base_path = File.join(dir, "base.cr")
+      File.write(base_path, "class Base\nend\n")
+      ws = workspace_for(dir)
+
+      created_path = File.join(dir, "created.cr")
+      File.write(created_path, <<-CRYSTAL)
+        class CreatedSample
+          getter value : MissingFromCreated
+        end
+      CRYSTAL
+
+      changes = [CRA::Types::FileEvent.new("file://#{created_path}", CRA::Types::FileChangeType::Created)]
+      touched = ws.apply_watched_file_changes(changes)
+      touched.should contain({uri: "file://#{created_path}", deleted: false})
+
+      request = CRA::Types::Message.from_json(%({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "workspace/diagnostic",
+        "params": {}
+      })).as(CRA::Types::WorkspaceDiagnosticRequest)
+
+      report = ws.workspace_diagnostics(request)
+      entry = report.items.find { |item| item.uri == "file://#{created_path}" }
+      entry.should_not be_nil
+      entry = entry.not_nil!.as(CRA::Types::WorkspaceFullDocumentDiagnosticReport)
+      entry.items.any? { |d| d.source == "semantic" && d.message.includes?("Unknown type 'MissingFromCreated'") }.should be_true
+    end
+  end
+
+  it "removes deleted files from watched file notifications" do
+    with_tmpdir do |dir|
+      doomed_path = File.join(dir, "doomed.cr")
+      File.write(doomed_path, "class DoomedType\nend\n")
+      ws = workspace_for(dir)
+
+      usage = Crystal::Parser.new("DoomedType").parse.as(Crystal::Path)
+      ws.analyzer.find_definitions(usage).size.should eq(1)
+
+      File.delete(doomed_path)
+      changes = [CRA::Types::FileEvent.new("file://#{doomed_path}", CRA::Types::FileChangeType::Deleted)]
+      touched = ws.apply_watched_file_changes(changes)
+      touched.should contain({uri: "file://#{doomed_path}", deleted: true})
+
+      request = CRA::Types::Message.from_json(%({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "workspace/diagnostic",
+        "params": {}
+      })).as(CRA::Types::WorkspaceDiagnosticRequest)
+      report = ws.workspace_diagnostics(request)
+      report.items.any? { |item| item.uri == "file://#{doomed_path}" }.should be_false
+      ws.analyzer.find_definitions(usage).size.should eq(0)
+    end
+  end
+
+  it "coalesces watched file events by final state for each uri" do
+    with_tmpdir do |dir|
+      path = File.join(dir, "flip.cr")
+      File.write(path, <<-CRYSTAL)
+        class FlipType
+          getter value : MissingFlipType
+        end
+      CRYSTAL
+      ws = workspace_for(dir)
+
+      changes = [
+        CRA::Types::FileEvent.new("file://#{path}", CRA::Types::FileChangeType::Deleted),
+        CRA::Types::FileEvent.new("file://#{path}", CRA::Types::FileChangeType::Changed),
+      ]
+      touched = ws.apply_watched_file_changes(changes)
+      touched.should eq([{uri: "file://#{path}", deleted: false}])
+    end
+  end
 end

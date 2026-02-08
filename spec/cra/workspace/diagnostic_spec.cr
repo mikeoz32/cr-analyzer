@@ -237,4 +237,141 @@ describe CRA::Workspace do
       params.diagnostics.any? { |d| d.message.includes?("Unused block argument 'x'") }.should be_false
     end
   end
+
+  it "emits semantic unknown type warnings without duplicates" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      class Foo
+        getter value : UnknownType
+      end
+      CR
+      path = File.join(dir, "unknown_type.cr")
+      File.write(path, code)
+      ws = workspace_for(dir)
+
+      params = ws.publish_diagnostics("file://#{path}")
+      unknown = params.diagnostics.select { |d| d.source == "semantic" && d.message.includes?("Unknown type 'UnknownType'") }
+      unknown.size.should eq(1)
+    end
+  end
+
+  it "emits semantic arity mismatch warning" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      class Foo
+        def bar(a, b)
+        end
+      end
+
+      Foo.new.bar(1)
+      CR
+      path = File.join(dir, "arity_mismatch.cr")
+      File.write(path, code)
+      ws = workspace_for(dir)
+
+      params = ws.publish_diagnostics("file://#{path}")
+      params.diagnostics.any? { |d| d.source == "semantic" && d.message.includes?("No overload matches 'bar' with arity 1") }.should be_true
+    end
+  end
+
+  it "emits unresolved path segment and invalid enum member warnings" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      module A
+        class B
+        end
+      end
+
+      enum Color
+        Red
+      end
+
+      A::Missing
+      Color::Blue
+      CR
+      path = File.join(dir, "paths.cr")
+      File.write(path, code)
+      ws = workspace_for(dir)
+
+      params = ws.publish_diagnostics("file://#{path}")
+      params.diagnostics.any? { |d| d.source == "semantic" && d.message.includes?("Unresolved path segment 'Missing' in 'A::Missing'") }.should be_true
+      params.diagnostics.any? { |d| d.source == "semantic" && d.message.includes?("Enum member 'Blue' is not defined in enum 'Color'") }.should be_true
+    end
+  end
+
+  it "emits unresolved include, extend, superclass and alias target warnings" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      class Child < MissingBase
+      end
+
+      class Holder
+        include MissingMixin
+        extend MissingExt
+      end
+
+      alias BrokenAlias = MissingType
+      CR
+      path = File.join(dir, "unresolved_type_refs.cr")
+      File.write(path, code)
+      ws = workspace_for(dir)
+
+      params = ws.publish_diagnostics("file://#{path}")
+      params.diagnostics.any? { |d| d.source == "semantic" && d.message.includes?("Unresolved superclass 'MissingBase'") }.should be_true
+      params.diagnostics.any? { |d| d.source == "semantic" && d.message.includes?("Unresolved include target 'MissingMixin'") }.should be_true
+      params.diagnostics.any? { |d| d.source == "semantic" && d.message.includes?("Unresolved extend target 'MissingExt'") }.should be_true
+      params.diagnostics.any? { |d| d.source == "semantic" && d.message.includes?("Alias 'BrokenAlias' references unknown type 'MissingType'") }.should be_true
+    end
+  end
+
+  it "includes semantic diagnostics in document diagnostic pull" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      class PullDiag
+        getter value : MissingType
+      end
+      CR
+      path = File.join(dir, "pull_semantic.cr")
+      File.write(path, code)
+      ws = workspace_for(dir)
+
+      request = CRA::Types::Message.from_json(%({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "textDocument/diagnostic",
+        "params": {
+          "textDocument": {"uri": "file://#{path}"}
+        }
+      })).as(CRA::Types::DocumentDiagnosticRequest)
+
+      report = ws.document_diagnostics(request).as(CRA::Types::DocumentDiagnosticReportFull)
+      report.items.any? { |d| d.source == "semantic" && d.message.includes?("Unknown type 'MissingType'") }.should be_true
+    end
+  end
+
+  it "includes non-open workspace files in workspace diagnostics" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      class WorkspaceDiag
+        getter value : MissingWorkspaceType
+      end
+      CR
+      path = File.join(dir, "workspace_pull.cr")
+      File.write(path, code)
+      ws = workspace_for(dir)
+
+      request = CRA::Types::Message.from_json(%({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "workspace/diagnostic",
+        "params": {}
+      })).as(CRA::Types::WorkspaceDiagnosticRequest)
+
+      report = ws.workspace_diagnostics(request)
+      entry = report.items.find { |item| item.uri == "file://#{path}" }
+      entry.should_not be_nil
+      entry = entry.not_nil!.as(CRA::Types::WorkspaceFullDocumentDiagnosticReport)
+      entry.items.any? { |d| d.source == "semantic" && d.message.includes?("Unknown type 'MissingWorkspaceType'") }.should be_true
+    end
+  end
 end

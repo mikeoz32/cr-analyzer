@@ -284,6 +284,39 @@ module CRA::Psi
       results
     end
 
+    # Public resolver for diagnostics and workspace features that need best-effort type lookup.
+    def resolve_type_for(
+      name : String,
+      context : String? = nil,
+      file : String? = nil
+    ) : CRA::Psi::Module | CRA::Psi::Class | CRA::Psi::Enum | Nil
+      canonical = canonical_name(name)
+
+      if name.starts_with?("::")
+        if resolved = find_type(canonical)
+          return resolved
+        end
+      else
+        if resolved = resolve_in_context(canonical, context)
+          return resolved
+        end
+      end
+
+      if alias_def = resolve_alias_in_context(canonical, context, file)
+        if target = alias_def.target
+          return resolve_type_ref(target, context)
+        end
+      end
+
+      nil
+    end
+
+    def resolve_enum_for(name : String, context : String? = nil, global : Bool = false) : CRA::Psi::Enum?
+      canonical = canonical_name(name)
+      return find_enum(canonical) if global || name.starts_with?("::")
+      resolve_enum(canonical, context)
+    end
+
     private def type_refs_for_node(
       node : Crystal::ASTNode,
       context : String?,

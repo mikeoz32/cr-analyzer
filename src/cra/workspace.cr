@@ -12,6 +12,7 @@ require "./workspace/document_symbols_index"
 require "./workspace/keyword_completion_provider"
 require "./workspace/require_path_completion_provider"
 require "./workspace/rename"
+require "./semantic_diagnostic_collector"
 
 module CRA
   class Workspace
@@ -19,6 +20,7 @@ module CRA
 
     @completion_providers : Array(CompletionProvider) = [] of CompletionProvider
     @documents : Hash(String, WorkspaceDocument) = {} of String => WorkspaceDocument
+    @workspace_files : Hash(String, Bool) = {} of String => Bool
 
     def self.from_s(uri : String)
       new(URI.parse(uri))
@@ -100,6 +102,7 @@ module CRA
     end
 
     private def index_file(file_path : String)
+      track_workspace_file(file_path)
       parser = Crystal::Parser.new(File.read(file_path))
       parser.wants_doc = true
       program = parser.parse
@@ -115,6 +118,7 @@ module CRA
       reindexed = [] of String
       path = URI.parse(uri).path
       return reindexed unless File.exists?(path) || program
+      track_workspace_uri(uri)
 
       old_types = @analyzer.type_names_for_file(uri)
       if program.nil?
@@ -163,6 +167,27 @@ module CRA
     rescue ex : Exception
       Log.error { "Error reindexing #{uri}: #{ex.message}" }
       [] of String
+    end
+
+    def apply_watched_file_changes(changes : Array(Types::FileEvent)) : Array(NamedTuple(uri: String, deleted: Bool))
+      touched = [] of NamedTuple(uri: String, deleted: Bool)
+
+      coalesced_watched_changes(changes).each do |entry|
+        uri = entry[:uri]
+        change_type = entry[:type]
+
+        case change_type
+        when Types::FileChangeType::Created, Types::FileChangeType::Changed
+          track_workspace_uri(uri)
+          reindex_file(uri)
+          touched << {uri: uri, deleted: false}
+        when Types::FileChangeType::Deleted
+          remove_workspace_file(uri)
+          touched << {uri: uri, deleted: true}
+        end
+      end
+
+      touched
     end
 
     def complete(request : Types::CompletionRequest) : Array(Types::CompletionItem)
@@ -553,7 +578,16 @@ module CRA
       document = document(request.text_document.uri)
       return Types::DocumentDiagnosticReportFull.new([] of Types::Diagnostic) unless document
 
-      Types::DocumentDiagnosticReportFull.new(document.diagnostics)
+      Types::DocumentDiagnosticReportFull.new(publish_diagnostics(request.text_document.uri).diagnostics)
+    end
+
+    def workspace_diagnostics(_request : Types::WorkspaceDiagnosticRequest) : Types::WorkspaceDiagnosticReport
+      reports = [] of Types::WorkspaceDocumentDiagnosticReport
+      workspace_diagnostic_uris.each do |uri|
+        params = publish_diagnostics(uri)
+        reports << Types::WorkspaceFullDocumentDiagnosticReport.new(uri, nil, params.diagnostics)
+      end
+      Types::WorkspaceDiagnosticReport.new(reports)
     end
 
     def workspace_symbols(request : Types::WorkspaceSymbolRequest) : Array(Types::SymbolInformation)
@@ -576,8 +610,101 @@ module CRA
 
     def publish_diagnostics(uri : String) : Types::PublishDiagnosticsParams
       document = document(uri)
-      diags = document ? document.diagnostics : [] of Types::Diagnostic
-      Types::PublishDiagnosticsParams.new(uri: uri, diagnostics: diags)
+      diagnostics = [] of Types::Diagnostic
+
+      if document
+        diagnostics.concat(document.diagnostics)
+        if program = document.program
+          semantic_collector = CRA::SemanticDiagnosticCollector.new(@analyzer, uri, diagnostics)
+          program.accept(semantic_collector)
+        end
+      end
+
+      diagnostics = dedupe_diagnostics(diagnostics)
+      Types::PublishDiagnosticsParams.new(uri: uri, diagnostics: diagnostics)
+    end
+
+    private def dedupe_diagnostics(diagnostics : Array(Types::Diagnostic)) : Array(Types::Diagnostic)
+      seen = {} of String => Bool
+      deduped = [] of Types::Diagnostic
+      diagnostics.each do |diagnostic|
+        range = diagnostic.range
+        key = "#{diagnostic.source}:#{diagnostic.severity}:#{diagnostic.message}:#{range.start_position.line}:#{range.start_position.character}:#{range.end_position.line}:#{range.end_position.character}"
+        next if seen[key]?
+        seen[key] = true
+        deduped << diagnostic
+      end
+      deduped
+    end
+
+    private def workspace_diagnostic_uris : Array(String)
+      uris = [] of String
+      seen = {} of String => Bool
+
+      @workspace_files.each_key do |uri|
+        next if seen[uri]?
+        seen[uri] = true
+        uris << uri
+      end
+
+      @documents.each_key do |uri|
+        if workspace_uri?(uri) && !seen[uri]?
+          seen[uri] = true
+          uris << uri
+        end
+      end
+
+      uris
+    end
+
+    private def workspace_uri?(uri : String) : Bool
+      path = URI.parse(uri).path
+      root = @path.to_s
+      path == root || path.starts_with?("#{root}/")
+    rescue
+      false
+    end
+
+    private def track_workspace_file(file_path : String)
+      root = @path.to_s
+      return unless file_path == root || file_path.starts_with?("#{root}/")
+      @workspace_files["file://#{file_path}"] = true
+    end
+
+    private def track_workspace_uri(uri : String)
+      return unless workspace_uri?(uri)
+      @workspace_files[uri] = true
+    end
+
+    private def remove_workspace_file(uri : String)
+      @workspace_files.delete(uri)
+      @documents.delete(uri)
+      @analyzer.remove_file(uri)
+      @indexer.symbols.delete(uri)
+    end
+
+    private def coalesced_watched_changes(
+      changes : Array(Types::FileEvent)
+    ) : Array(NamedTuple(uri: String, type: Types::FileChangeType))
+      ordered_uris = [] of String
+      latest_by_uri = {} of String => Types::FileChangeType
+
+      changes.each do |change|
+        uri = change.uri
+        next unless uri.ends_with?(".cr")
+        next unless workspace_uri?(uri)
+
+        unless latest_by_uri.has_key?(uri)
+          ordered_uris << uri
+        end
+        latest_by_uri[uri] = change.type
+      end
+
+      ordered_uris.compact_map do |uri|
+        change_type = latest_by_uri[uri]?
+        next nil unless change_type
+        {uri: uri, type: change_type}
+      end
     end
 
     private def elements_to_locations(elements : Array(Psi::PsiElement)) : Array(Types::Location)

@@ -257,7 +257,10 @@ module CRA
 
       def handle(request : Types::WorkspaceDiagnosticRequest)
         Log.error { "Handling workspace diagnostic request" }
-        # Only document diagnostics supported for now.
+        @workspace.try do |ws|
+          report = ws.workspace_diagnostics(request)
+          return Types::Response.new(request.id, report)
+        end
         Types::Response.new(request.id, Types::WorkspaceDiagnosticReport.new([] of Types::WorkspaceDocumentDiagnosticReport))
       rescue ex
         Log.error { "Error handling request: #{ex.message}" }
@@ -267,6 +270,26 @@ module CRA
       # Notifications are no-ops server-side; client controls publish.
       def handle(request : Types::DidChangeConfigurationNotification)
         Log.info { "Configuration changed: #{request.to_json}" }
+        nil
+      end
+
+      def handle(request : Types::DidChangeWatchedFilesNotification)
+        Log.info { "Handling didChangeWatchedFiles notification" }
+        @workspace.try do |ws|
+          changes = request.params_data.try(&.changes) || [] of Types::FileEvent
+          touched = ws.apply_watched_file_changes(changes)
+          if should_push_diagnostics?
+            touched.each do |item|
+              if item[:deleted]
+                empty = Types::PublishDiagnosticsParams.new(uri: item[:uri], diagnostics: [] of Types::Diagnostic)
+                @server.send(Types::PublishDiagnosticsNotification.new(empty))
+              else
+                ws_diag = ws.publish_diagnostics(item[:uri])
+                @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
+              end
+            end
+          end
+        end
         nil
       end
 
@@ -338,7 +361,7 @@ module CRA
           rescue ex
             Log.error { "Error parsing #{uri}: #{ex.message}" }
           end
-          ws.reindex_file(uri, program)
+          ws.reindex_file(uri, program) if program
           if should_push_diagnostics?
             ws_diag = ws.publish_diagnostics(uri)
             @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
@@ -360,7 +383,7 @@ module CRA
             Log.error { "Error parsing #{uri}: #{ex.message}" }
             return nil
           end
-          ws.reindex_file(uri, program)
+          ws.reindex_file(uri, program) if program
           if should_push_diagnostics?
             ws_diag = ws.publish_diagnostics(uri)
             @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
@@ -382,7 +405,7 @@ module CRA
             rescue ex
               Log.error { "Error parsing #{uri}: #{ex.message}" }
             end
-            ws.reindex_file(uri, program)
+            ws.reindex_file(uri, program) if program
           else
             ws.reindex_file(uri)
           end
@@ -433,7 +456,7 @@ module CRA
             inline_value_provider: true,
             diagnostic_provider: Types::DiagnosticOptions.new(
               inter_file_dependencies: false,
-              workspace_diagnostics: false
+              workspace_diagnostics: true
             )
           )
         ))
