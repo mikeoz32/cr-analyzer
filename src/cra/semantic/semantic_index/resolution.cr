@@ -78,7 +78,8 @@ module CRA::Psi
       scope_def : Crystal::Def? = nil,
       scope_class : Crystal::ClassDef? = nil,
       cursor : Crystal::Location? = nil,
-      current_file : String? = nil
+      current_file : String? = nil,
+      proc_def : Crystal::Def? = nil
     ) : Array(PsiElement)
       results = [] of PsiElement
       type_env : TypeEnv? = nil
@@ -100,21 +101,85 @@ module CRA::Psi
         if context && (owner = find_type(context))
           results.concat(find_methods_with_ancestors(owner, node.name))
         end
+      when Crystal::Arg
+        type_refs = type_refs_for_node(node, context, scope_def, scope_class, cursor)
+        if type_refs.empty? && context
+          # For ivar-backed params (@name in initialize), infer from getter type.
+          type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
+          if ivar_ref = type_env.ivars["@#{node.name}"]?
+            type_refs = [ivar_ref]
+          end
+        end
+        if type_refs.any?
+          file = current_file || @current_file
+          arg_type = type_refs.map(&.display).join(" | ")
+          results << CRA::Psi::LocalVar.new(
+            file: file,
+            name: node.name,
+            type: arg_type,
+            location: location_for(node)
+          )
+        end
       when Crystal::Var
-        if scope_def
+        if proc_def
+          proc_def.args.each do |arg|
+            next unless arg.name == node.name
+            if restriction = arg.restriction
+              if type_ref = type_ref_from_type(restriction)
+                results << CRA::Psi::LocalVar.new(
+                  file: current_file || @current_file,
+                  name: node.name,
+                  type: type_ref.display,
+                  location: location_for(arg)
+                )
+              end
+            end
+            break
+          end
+        end
+        if results.empty? && scope_def
           if def_node = local_definition(scope_def, node.name, cursor)
             file = current_file || @current_file
+            type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
+            local_type = type_env.locals[node.name]?.try(&.display) || ""
+            if local_type.empty?
+              if type_ref = infer_type_ref(node, context, scope_def, scope_class, cursor)
+                local_type = type_ref.display
+              end
+            end
             results << CRA::Psi::LocalVar.new(
               file: file,
               name: node.name,
+              type: local_type,
               location: location_for(def_node)
             )
           end
         end
+        if results.empty? && context && (owner = find_type(context))
+          # Class-level var (e.g., inside getter/property/setter declaration).
+          # Look for a matching accessor method (including ancestors) to get the type.
+          methods = find_methods_with_ancestors(owner, node.name, false)
+          if method = methods.find(&.return_type_ref)
+            file = current_file || @current_file
+            results << CRA::Psi::LocalVar.new(
+              file: file,
+              name: node.name,
+              type: method.return_type_ref.not_nil!.display,
+              location: location_for(node)
+            )
+          end
+        end
       when Crystal::InstanceVar
-        if def_node = instance_var_definition(scope_def, scope_class, node.name, cursor)
+        def_node = instance_var_definition(scope_def, scope_class, node.name, cursor)
+        # When no local definition is found (e.g., inherited ivar), still try
+        # the type env which walks ancestors via fill_ivars_from_getters.
+        unless def_node
+          type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
+          def_node = node if type_env.ivars[node.name]?
+        end
+        if def_node
           file = current_file || @current_file
-          type_env ||= build_type_env(scope_def, scope_class, cursor)
+          type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
           ivar_type = type_env.ivars[node.name]?.try(&.display) || "Unknown"
           if context && (owner = find_class(context))
             results << CRA::Psi::InstanceVar.new(
@@ -150,21 +215,25 @@ module CRA::Psi
               end
             end
           when Crystal::Var
-            type_env ||= build_type_env(scope_def, scope_class, cursor)
-            if type_ref = type_env.locals[obj.name]?
+            type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
+            type_ref = type_env.locals[obj.name]?
+            unless type_ref
+              type_ref = infer_type_ref(obj, context, scope_def, scope_class, cursor)
+            end
+            if type_ref
               if owner = resolve_type_ref(type_ref, context)
                 candidates.concat(find_methods_with_ancestors(owner, node.name, false))
               end
             end
           when Crystal::InstanceVar
-            type_env ||= build_type_env(scope_def, scope_class, cursor)
+            type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
             if type_ref = type_env.ivars[obj.name]?
               if owner = resolve_type_ref(type_ref, context)
                 candidates.concat(find_methods_with_ancestors(owner, node.name, false))
               end
             end
           when Crystal::ClassVar
-            type_env ||= build_type_env(scope_def, scope_class, cursor)
+            type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
             if type_ref = type_env.cvars[obj.name]?
               if owner = resolve_type_ref(type_ref, context)
                 candidates.concat(find_methods_with_ancestors(owner, node.name, false))
@@ -173,7 +242,8 @@ module CRA::Psi
           else
             if type_ref = infer_type_ref(obj, context, scope_def, scope_class, cursor)
               if owner = resolve_type_ref(type_ref, context)
-                candidates.concat(find_methods_with_ancestors(owner, node.name, false))
+                is_class_call = obj.is_a?(Crystal::Call) && obj.name == "class"
+                candidates.concat(find_methods_with_ancestors(owner, node.name, is_class_call))
               end
             end
           end

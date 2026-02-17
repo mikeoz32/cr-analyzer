@@ -168,16 +168,6 @@ module CRA
           )
         end
 
-        if line.strip == "rescue"
-          start_pos = Types::Position.new(line: idx, character: 0)
-          end_pos = Types::Position.new(line: idx, character: line.size)
-          @diagnostics << Types::Diagnostic.new(
-            range: Types::Range.new(start_pos, end_pos),
-            severity: Types::DiagnosticSeverity::Warning,
-            message: "Empty rescue block?",
-            source: "lint"
-          )
-        end
 
         if line =~ /\S\s+$/
           start_pos = Types::Position.new(line: idx, character: line.rstrip.size)
@@ -254,6 +244,8 @@ module CRA
       program.accept(collector)
       block_collector = UnusedBlockArgCollector.new(@diagnostics)
       program.accept(block_collector)
+      rescue_collector = EmptyRescueCollector.new(@diagnostics)
+      program.accept(rescue_collector)
     end
 
     # Collect unused def args (ignores names starting with underscore).
@@ -266,6 +258,7 @@ module CRA
       continue_all
 
       def visit(node : Crystal::Def) : Bool
+        return true if node.abstract?
         args = node.args.reject { |arg| arg.name.starts_with?("_") }
         return true if args.empty?
 
@@ -352,6 +345,34 @@ module CRA
           message: "Unused block argument '#{name}'",
           source: "lint"
         )
+      end
+    end
+
+    # Detects bare rescue blocks with empty bodies.
+    class EmptyRescueCollector < Crystal::Visitor
+      include Workspace::VisitorHelpers
+
+      def initialize(@diagnostics : Array(CRA::Types::Diagnostic))
+      end
+
+      continue_all
+
+      def visit(node : Crystal::ExceptionHandler) : Bool
+        node.rescues.try &.each do |rescue_node|
+          next unless rescue_node.types.nil? && rescue_node.name.nil?
+          next unless rescue_node.body.is_a?(Crystal::Nop)
+          if loc = rescue_node.location
+            start_pos = CRA::Types::Position.new(line: loc.line_number - 1, character: loc.column_number - 1)
+            end_pos = CRA::Types::Position.new(line: loc.line_number - 1, character: loc.column_number - 1 + "rescue".size)
+            @diagnostics << CRA::Types::Diagnostic.new(
+              range: CRA::Types::Range.new(start_pos, end_pos),
+              severity: CRA::Types::DiagnosticSeverity::Warning,
+              message: "Empty rescue block?",
+              source: "lint"
+            )
+          end
+        end
+        true
       end
     end
 

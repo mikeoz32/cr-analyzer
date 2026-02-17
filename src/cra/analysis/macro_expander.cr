@@ -146,6 +146,7 @@ module CRA
              name = target.var.to_s
              type_decl = target.declared_type.to_s
            end
+           type_decl ||= infer_type_name(arg.value)
         end
 
         return if name.empty?
@@ -169,6 +170,43 @@ module CRA
         end
         io.puts "  @#{name}"
         io.puts "end"
+      end
+
+      private def self.infer_type_name(node : Crystal::ASTNode) : String?
+        case node
+        when Crystal::StringLiteral  then "String"
+        when Crystal::CharLiteral    then "Char"
+        when Crystal::BoolLiteral    then "Bool"
+        when Crystal::SymbolLiteral  then "Symbol"
+        when Crystal::NilLiteral     then "Nil"
+        when Crystal::NumberLiteral
+          case node.kind
+          when .i8?   then "Int8"
+          when .i16?  then "Int16"
+          when .i32?  then "Int32"
+          when .i64?  then "Int64"
+          when .i128? then "Int128"
+          when .u8?   then "UInt8"
+          when .u16?  then "UInt16"
+          when .u32?  then "UInt32"
+          when .u64?  then "UInt64"
+          when .u128? then "UInt128"
+          when .f32?  then "Float32"
+          when .f64?  then "Float64"
+          else
+            node.value.includes?('.') ? "Float64" : "Int32"
+          end
+        when Crystal::ArrayLiteral
+          if of_type = node.of
+            "Array(#{of_type})"
+          end
+        when Crystal::HashLiteral
+          if of_entry = node.of
+            "Hash(#{of_entry.key}, #{of_entry.value})"
+          end
+        else
+          nil
+        end
       end
 
       private def self.write_setter(io, name, type)

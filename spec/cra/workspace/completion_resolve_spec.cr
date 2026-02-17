@@ -74,7 +74,7 @@ describe CRA::Workspace do
       contents = resolved.documentation.not_nil!.as_h
       contents["kind"].as_s.should eq("markdown")
       value = contents["value"].as_s
-      value.should contain("def Greeter#greet(name)")
+      value.should contain("def Greeter.greet(name)")
       value.should contain("Says hello.")
     end
   end

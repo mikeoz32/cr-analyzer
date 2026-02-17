@@ -94,7 +94,13 @@ module CRA::Psi
     end
 
     # Builds a local type env from class-level declarations, initialize, and the current def.
-    private def build_type_env(scope_def : Crystal::Def?, scope_class : Crystal::ClassDef?, cursor : Crystal::Location?) : TypeEnv
+    private def build_type_env(
+      scope_def : Crystal::Def?,
+      scope_class : Crystal::ClassDef?,
+      cursor : Crystal::Location?,
+      context : String? = nil,
+      deep : Bool = false
+    ) : TypeEnv
       env = TypeEnv.new
       if scope_class
         # Collect ivar declarations and assignments at class level.
@@ -103,6 +109,10 @@ module CRA::Psi
         scope_class.body.accept(InitializeCollector.new(TypeCollector.new(env, nil, false)))
         # Fill missing ivars/cvars from other method bodies (best-effort).
         scope_class.body.accept(DefIvarCollector.new(TypeCollector.new(env, nil, false, true)))
+        # Fill missing ivars from getter/property return types (macro-expanded).
+        if context && (owner = find_type(context))
+          fill_ivars_from_getters(env, owner)
+        end
       end
       if scope_def
         scope_def.args.each do |arg|
@@ -112,9 +122,81 @@ module CRA::Psi
             end
           end
         end
-        scope_def.body.accept(TypeCollector.new(env, cursor, true))
+        infer_cb = if deep
+                     ->(node : Crystal::ASTNode) { infer_type_ref(node, context, scope_def, scope_class, cursor) }
+                   end
+        block_hints_cb = if deep
+                           ->(call : Crystal::Call, receiver_type : TypeRef?) { block_param_types_for_call(call, receiver_type, context) }
+                         end
+        scope_def.body.accept(TypeCollector.new(env, cursor, true, false, infer_cb, block_hints_cb))
       end
       env
+    end
+
+    # Getter/property macros expand to methods with return types but don't
+    # produce explicit ivar type declarations.  Infer @name from the method's
+    # return type for any ivar not already typed in the env.  Walks ancestors
+    # so child structs/classes inherit getter types.
+    private def fill_ivars_from_getters(env : TypeEnv, owner : PsiElement)
+      fill_ivars_from_getters_walk(env, owner, {} of String => Bool)
+    end
+
+    private def fill_ivars_from_getters_walk(env : TypeEnv, owner : PsiElement, visited : Hash(String, Bool))
+      return unless owner.is_a?(CRA::Psi::Class) || owner.is_a?(CRA::Psi::Module)
+      return if visited[owner.name]?
+      visited[owner.name] = true
+
+      owner.methods.each do |method|
+        next if method.class_method
+        next unless method.min_arity == 0 && method.max_arity == 0
+        ivar_name = "@#{method.name}"
+        next if env.ivars[ivar_name]?
+        if ret = method.return_type_ref
+          env.ivars[ivar_name] = ret
+        end
+      end
+
+      case owner
+      when CRA::Psi::Class
+        if includes = @class_includes[owner.name]?
+          includes.each do |inc|
+            if resolved = resolve_type_node(inc, owner.name)
+              fill_ivars_from_getters_walk(env, resolved, visited)
+            end
+          end
+        end
+        if super_node = @class_superclass[owner.name]?
+          if resolved = resolve_type_node(super_node, owner.name)
+            fill_ivars_from_getters_walk(env, resolved, visited)
+          end
+        end
+      when CRA::Psi::Module
+        if includes = @module_includes[owner.name]?
+          includes.each do |inc|
+            if resolved = resolve_type_node(inc, owner.name)
+              fill_ivars_from_getters_walk(env, resolved, visited)
+            end
+          end
+        end
+      end
+    end
+
+    private def block_param_types_for_call(call : Crystal::Call, receiver_type : TypeRef?, context : String?) : Array(TypeRef)
+      return [] of TypeRef unless receiver_type
+      class_method = false
+      if obj = call.obj
+        class_method = obj.is_a?(Crystal::Path) || obj.is_a?(Crystal::Generic) || obj.is_a?(Crystal::Metaclass)
+      end
+      owner = resolve_type_ref(receiver_type, context)
+      return [] of TypeRef unless owner
+      candidates = find_methods_with_ancestors(owner, call.name, class_method)
+      return [] of TypeRef if candidates.empty?
+      narrowed = filter_methods_by_arity_strict(candidates, call)
+      method = (narrowed.empty? ? candidates : narrowed).first
+      owner_name = method.owner.try(&.name) || owner.name
+      method.block_arg_types.map do |t|
+        t.name == "self" ? TypeRef.named(owner_name) : t
+      end
     end
 
     private def complete_members(
@@ -413,18 +495,23 @@ module CRA::Psi
       when Crystal::Call
         if type_ref = infer_type_ref(receiver, context, scope_def, scope_class, cursor)
           if owner = resolve_type_ref(type_ref, context)
-            return {owner, false}
+            is_class_call = receiver.name == "class"
+            return {owner, is_class_call}
           end
         end
       when Crystal::Var
-        type_env ||= build_type_env(scope_def, scope_class, cursor)
-        if type_ref = type_env.locals[receiver.name]?
+        type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
+        type_ref = type_env.locals[receiver.name]?
+        unless type_ref
+          type_ref = infer_type_ref(receiver, context, scope_def, scope_class, cursor)
+        end
+        if type_ref
           if owner = resolve_type_ref(type_ref, context)
             return {owner, false}
           end
         end
       when Crystal::InstanceVar
-        type_env ||= build_type_env(scope_def, scope_class, cursor)
+        type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
         if type_ref = type_env.ivars[receiver.name]?
           if owner = resolve_type_ref(type_ref, context)
             return {owner, false}
@@ -434,7 +521,7 @@ module CRA::Psi
           return {owner, false}
         end
       when Crystal::ClassVar
-        type_env ||= build_type_env(scope_def, scope_class, cursor)
+        type_env ||= build_type_env(scope_def, scope_class, cursor, context, deep: true)
         if type_ref = type_env.cvars[receiver.name]?
           if owner = resolve_type_ref(type_ref, context)
             return {owner, true}
@@ -525,12 +612,12 @@ module CRA::Psi
               else
                 "#{method.min_arity}+"
               end
-      "#{owner_name}#{method.class_method ? "." : "#"}#{method.name} (arity #{arity})"
+      "#{owner_name}.#{method.name} (arity #{arity})"
     end
 
     private def method_signature(method : CRA::Psi::Method) : String
       owner_name = method.owner.try(&.name) || "self"
-      separator = method.class_method ? "." : "#"
+      separator = "."
       params = method.parameters.join(", ")
       signature = "def #{owner_name}#{separator}#{method.name}"
       signature += "(#{params})" unless params.empty?

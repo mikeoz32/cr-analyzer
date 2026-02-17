@@ -18,6 +18,7 @@ module CRA
       @node_path = [] of Crystal::ASTNode
       @previous_node_path = [] of Crystal::ASTNode
       @stack = [] of Crystal::ASTNode
+      @best_depth = 0
       @cursor_location = Crystal::Location.new(
         filename: "",
         line_number: @line + 1,
@@ -29,9 +30,10 @@ module CRA
     def visit(node : Crystal::ASTNode) : Bool
       return false unless traversable?(node)
       @stack << node
-      if hits?(node)
+      if hits?(node) && @stack.size >= @best_depth
         @node = node
         @node_path = @stack.dup
+        @best_depth = @stack.size
       end
       update_previous(node)
       node.accept_children(self)
@@ -67,7 +69,16 @@ module CRA
 
     def enclosing_def : Crystal::Def?
       context_path.reverse_each do |node|
+        next if node.is_a?(Crystal::Def) && node.name == "->"
         return node if node.is_a?(Crystal::Def)
+      end
+      nil
+    end
+
+    def enclosing_proc_def : Crystal::Def?
+      context_path.reverse_each do |node|
+        return node if node.is_a?(Crystal::Def) && node.name == "->"
+        return nil if node.is_a?(Crystal::Def)
       end
       nil
     end
@@ -118,6 +129,10 @@ module CRA
 
       size = node.name_size
       return nil if size <= 0
+
+      # Crystal::Arg location starts at '@' for ivar-backed params but
+      # name_size only counts the name without the '@' prefix.
+      size += 1 if node.is_a?(Crystal::Arg) && !node.name_location
 
       end_loc = Crystal::Location.new(
         filename: loc.filename,

@@ -448,4 +448,5 @@ describe CRA::Workspace do
       labels(items).should contain("foo/baz")
     end
   end
+
 end

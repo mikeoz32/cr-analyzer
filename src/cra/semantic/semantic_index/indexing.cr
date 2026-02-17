@@ -165,6 +165,28 @@ module CRA::Psi
       end
     end
 
+    # Crystal primitive types have implicit superclass relationships baked into
+    # the compiler that don't appear in the source code.  Register them so that
+    # ancestor method lookups (e.g., Int64 → Int.from_io) work correctly.
+    PRIMITIVE_SUPERCLASSES = {
+      "Int8" => "Int", "Int16" => "Int", "Int32" => "Int", "Int64" => "Int", "Int128" => "Int",
+      "UInt8" => "Int", "UInt16" => "Int", "UInt32" => "Int", "UInt64" => "Int", "UInt128" => "Int",
+      "Float32" => "Float", "Float64" => "Float",
+      "Int" => "Number", "Float" => "Number",
+      "Number" => "Value", "Value" => "Object",
+      "Reference" => "Object",
+      "String" => "Reference", "Symbol" => "Value",
+      "Bool" => "Value", "Char" => "Value", "Nil" => "Value",
+    }
+
+    def register_primitive_superclasses
+      PRIMITIVE_SUPERCLASSES.each do |child, parent|
+        next if @class_superclass[child]?
+        next unless find_class(child) || find_type(child)
+        @class_superclass[child] = Crystal::Path.new(parent)
+      end
+    end
+
     def set_superclass(name : String, superclass : Crystal::ASTNode)
       file = @current_file
       if file

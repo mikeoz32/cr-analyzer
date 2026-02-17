@@ -31,6 +31,7 @@ module CRA::Psi
     @reverse_call_graph : Hash(String, Array(CallEdge)) = {} of String => Array(CallEdge)
     @method_by_key : Hash(String, CRA::Psi::Method) = {} of String => CRA::Psi::Method
     @methods_by_file : Hash(String, Array(CRA::Psi::Method)) = {} of String => Array(CRA::Psi::Method)
+    @pending_yield_defs : Array({Crystal::Def, PsiElement, Method}) = [] of {Crystal::Def, PsiElement, Method}
 
     struct CallEdge
       getter target_key : String
@@ -64,6 +65,33 @@ module CRA::Psi
 
       def initialize(@owner : String, @dependency : String)
       end
+    end
+
+    # Public wrappers for indexer use (e.g. YieldTypeExtractor).
+    def resolve_type_ref_public(type_ref : TypeRef) : CRA::Psi::Module | CRA::Psi::Class | CRA::Psi::Enum | Nil
+      resolve_type_ref(type_ref, nil)
+    end
+
+    def find_methods_in_type(owner : CRA::Psi::PsiElement, name : String, class_method : Bool) : Array(Method)
+      find_methods_with_ancestors(owner, name, class_method)
+    end
+
+    def add_pending_yield_def(def_node : Crystal::Def, owner : PsiElement, method : Method)
+      @pending_yield_defs << {def_node, owner, method}
+    end
+
+    def resolve_pending_yield_types
+      @pending_yield_defs.each do |def_node, owner, method|
+        next unless method.block_arg_types.empty?
+        body = def_node.body
+        next unless body
+        extractor = SemanticIndexer::YieldTypeExtractor.new(def_node, owner, self)
+        body.accept(extractor)
+        unless extractor.types.empty?
+          method.block_arg_types = extractor.types
+        end
+      end
+      @pending_yield_defs.clear
     end
 
     # Lightweight type hints collected from the current lexical scope.

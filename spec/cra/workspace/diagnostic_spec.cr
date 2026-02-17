@@ -141,6 +141,41 @@ describe CRA::Workspace do
     end
   end
 
+  it "warns on empty rescue" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      begin
+        foo
+      rescue
+      end
+      CR
+      path = File.join(dir, "empty_rescue.cr")
+      File.write(path, code)
+      ws = workspace_for(dir)
+
+      params = ws.publish_diagnostics("file://#{path}")
+      params.diagnostics.any? { |d| d.source == "lint" && d.message.includes?("Empty rescue") }.should be_true
+    end
+  end
+
+  it "does not warn on non-empty rescue" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      begin
+        foo
+      rescue
+        ch.send(nil)
+      end
+      CR
+      path = File.join(dir, "rescue_body.cr")
+      File.write(path, code)
+      ws = workspace_for(dir)
+
+      params = ws.publish_diagnostics("file://#{path}")
+      params.diagnostics.any? { |d| d.message.includes?("Empty rescue") }.should be_false
+    end
+  end
+
   it "hints trailing whitespace" do
     with_tmpdir do |dir|
       code = <<-CR
@@ -218,6 +253,23 @@ describe CRA::Workspace do
       params = ws.publish_diagnostics("file://#{path}")
       params.diagnostics.any? { |d| d.message.includes?("Mixed tabs and spaces") }.should be_true
       params.diagnostics.any? { |d| d.message.includes?("does not end with a newline") }.should be_true
+    end
+  end
+
+  it "does not flag abstract def params as unused" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      abstract class Foo
+        abstract def foo(a, _b, c)
+        abstract def bar(a : Int32) : String
+      end
+      CR
+      path = File.join(dir, "abstract_args.cr")
+      File.write(path, code)
+      ws = workspace_for(dir)
+
+      params = ws.publish_diagnostics("file://#{path}")
+      params.diagnostics.any? { |d| d.source == "lint" && d.message.includes?("Unused argument") }.should be_false
     end
   end
 

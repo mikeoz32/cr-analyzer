@@ -101,10 +101,14 @@ module CRA
       getter return_type : String
       getter return_type_ref : TypeRef?
       getter parameters : Array(String)
+      getter param_type_refs : Array(TypeRef?)
+      getter free_vars : Array(String)
       getter min_arity : Int32
       getter max_arity : Int32?
       getter class_method : Bool
       getter owner : PsiElement | Nil
+      property block_arg_types : Array(TypeRef)
+      getter block_return_type_ref : TypeRef?
       def initialize(
         @file : String?,
         @name : String,
@@ -115,6 +119,10 @@ module CRA
         @owner : PsiElement | Nil,
         @parameters : Array(String) = [] of String,
         @return_type_ref : TypeRef? = nil,
+        @param_type_refs : Array(TypeRef?) = [] of TypeRef?,
+        @free_vars : Array(String) = [] of String,
+        @block_arg_types : Array(TypeRef) = [] of TypeRef,
+        @block_return_type_ref : TypeRef? = nil,
         @location : Location? = nil,
         @doc : String? = nil)
       end
@@ -157,8 +165,9 @@ module CRA
     end
 
     class LocalVar < PsiElement
+      getter type : String
       getter owner : PsiElement | Nil
-      def initialize(@file : String?, @name : String, @owner : PsiElement | Nil = nil, @location : Location? = nil, @doc : String? = nil)
+      def initialize(@file : String?, @name : String, @type : String = "", @owner : PsiElement | Nil = nil, @location : Location? = nil, @doc : String? = nil)
       end
     end
 

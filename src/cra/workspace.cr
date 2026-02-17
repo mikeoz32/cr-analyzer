@@ -64,6 +64,8 @@ module CRA
       scan_path(lib_path, seen) if Dir.exists?(lib_path.to_s)
 
       scan_path(@path, seen)
+      @analyzer.resolve_pending_yield_types
+      @analyzer.register_primitive_superclasses
       @analyzer.dump_roots if ENV["CRA_DUMP_ROOTS"]? == "1"
     end
 
@@ -159,6 +161,7 @@ module CRA
         reindexed << dep_uri
       end
 
+      @analyzer.resolve_pending_yield_types
       reindexed
     rescue ex : Exception
       Log.error { "Error reindexing #{uri}: #{ex.message}" }
@@ -233,10 +236,11 @@ module CRA
           definitions = @analyzer.find_definitions(
             n,
             finder.enclosing_type_name,
-            finder.enclosing_def,
+            effective_scope_def(finder, doc),
             finder.enclosing_class,
             finder.cursor_location,
-            request.text_document.uri
+            request.text_document.uri,
+            proc_def: finder.enclosing_proc_def
           )
           return elements_to_locations(definitions)
         end
@@ -315,10 +319,11 @@ module CRA
       definitions = @analyzer.find_definitions(
         node,
         finder.enclosing_type_name,
-        finder.enclosing_def,
+        effective_scope_def(finder, document),
         finder.enclosing_class,
         finder.cursor_location,
-        request.text_document.uri
+        request.text_document.uri,
+        proc_def: finder.enclosing_proc_def
       )
       return nil if definitions.empty?
 
@@ -587,16 +592,45 @@ module CRA
         def_loc = def_node.location
         def_file = def_node.file
         next unless def_loc && def_file
-        uri = def_file.starts_with?("file://") ? def_file : "file://#{def_file}"
-        key = "#{uri}:#{def_loc.start_line}:#{def_loc.start_character}:#{def_loc.end_line}:#{def_loc.end_character}"
+        uri, range = resolve_macro_uri(def_file, def_loc)
+        key = "#{uri}:#{range.start_position.line}:#{range.start_position.character}:#{range.end_position.line}:#{range.end_position.character}"
         next if seen[key]?
         seen[key] = true
-        locations << Types::Location.new(
-          uri: uri,
-          range: def_loc.to_range
-        )
+        locations << Types::Location.new(uri: uri, range: range)
       end
       locations
+    end
+
+    private def resolve_macro_uri(file : String, loc : Psi::Location) : {String, Types::Range}
+      if file.starts_with?("crystal-macro:")
+        # Format: crystal-macro:{path}/{macro_name}/{line}_{col}.cr
+        raw = file.sub("crystal-macro:", "")
+        if match = raw.match(/^(.+)\/\w+\/(\d+)_(\d+)\.cr$/)
+          original_path = match[1]
+          line = match[2].to_i - 1
+          col = match[3].to_i - 1
+          uri = "file://#{original_path}"
+          range = Types::Range.new(
+            start_position: Types::Position.new(line: line, character: col),
+            end_position: Types::Position.new(line: line, character: col)
+          )
+          return {uri, range}
+        end
+      end
+      uri = file.starts_with?("file://") ? file : "file://#{file}"
+      {uri, loc.to_range}
+    end
+
+    # For top-level code (no enclosing def), create a synthetic Def so that
+    # build_type_env / TypeCollector can collect local variable types.
+    private def effective_scope_def(finder : NodeFinder, document : WorkspaceDocument) : Crystal::Def?
+      finder.enclosing_def || file_scope_def(document)
+    end
+
+    private def file_scope_def(document : WorkspaceDocument) : Crystal::Def?
+      if body = document.program
+        Crystal::Def.new("__file__", [] of Crystal::Arg, body)
+      end
     end
 
     private def hover_contents(definitions : Array(Psi::PsiElement)) : JSON::Any
@@ -649,12 +683,23 @@ module CRA
     private def hover_signature(definition : Psi::PsiElement) : String
       case definition
       when Psi::Method
+        # Simple getter: 0-param instance method with a return type — show as property.
+        if !definition.class_method && definition.min_arity == 0 && definition.max_arity == 0 &&
+           (definition.return_type_ref || definition.return_type != "Nil")
+          return "#{definition.name} : #{definition.return_type}"
+        end
         owner_name = definition.owner.try(&.name) || "self"
-        separator = definition.class_method ? "." : "#"
-        params = definition.parameters.join(", ")
+        separator = "."
+        params = definition.parameters.map_with_index { |name, i|
+          if type_ref = definition.param_type_refs[i]?
+            "#{name} : #{type_ref.display}"
+          else
+            name
+          end
+        }.join(", ")
         signature = "def #{owner_name}#{separator}#{definition.name}"
         signature += "(#{params})" unless params.empty?
-        if definition.return_type_ref
+        if definition.return_type_ref || definition.return_type != "Nil"
           signature += " : #{definition.return_type}"
         end
         signature
@@ -678,6 +723,12 @@ module CRA
       when Psi::ClassVar
         type_name = definition.type.empty? ? "Unknown" : definition.type
         "#{definition.name} : #{type_name}"
+      when Psi::LocalVar
+        if definition.type.empty?
+          definition.name
+        else
+          "#{definition.name} : #{definition.type}"
+        end
       else
         definition.name
       end

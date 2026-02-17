@@ -62,7 +62,7 @@ describe CRA::Workspace do
       help = help.not_nil!
       help.signatures.should_not be_empty
       help.active_parameter.should eq(1)
-      help.signatures.first.label.should contain("Greeter#greet")
+      help.signatures.first.label.should contain("Greeter.greet")
       doc = help.signatures.first.documentation
       doc.should_not be_nil
       doc_value = doc.not_nil!.as_h["value"].as_s
