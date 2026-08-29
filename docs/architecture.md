@@ -9,6 +9,7 @@ This document describes the major runtime pieces and the request flow.
 - `CRA::Workspace`: manages documents, indexing, completions, definitions, references, diagnostics.
 - `CRA::WorkspaceDocument`: stores text, parsed AST, diagnostics, and NodeFinder context.
 - `CRA::Psi::SemanticIndex`: semantic database for types, methods, vars, aliases, enums; call graph.
+- `Facet::Compiler::Parser` 0.1.5: tolerant parser used for default syntax diagnostics.
 - Completion providers: `SemanticIndex`, `KeywordCompletionProvider`, `RequirePathCompletionProvider`.
 - `DocumentSymbolsIndex`: AST visitor for document/workspace symbols.
 
@@ -20,7 +21,7 @@ This document describes the major runtime pieces and the request flow.
 4. definition/declaration/implementation/typeDefinition -> NodeFinder -> SemanticIndex.find_definitions.
 5. references -> NodeFinder -> Workspace/SemanticIndex references.
 6. call hierarchy -> SemanticIndex call graph.
-7. diagnostics -> WorkspaceDocument parse + facet lints -> publish/pull.
+7. diagnostics -> Facet parser + local lints -> publish/pull; Crystal::Parser is the fallback.
 
 ## Indexing and updates
 
@@ -28,3 +29,15 @@ This document describes the major runtime pieces and the request flow.
 - Each change parses the full document with Crystal::Parser.
 - Reindexing also reindexes dependent types based on include/extend and superclass relationships.
 - stdlib lookup uses CRYSTAL_PATH or CRYSTAL_HOME, with /usr/share/crystal/src as fallback.
+
+## Parser boundary
+
+The server currently parses an edited document for two different purposes:
+
+- Crystal::Parser produces the `Crystal::ASTNode` tree consumed by NodeFinder,
+  DocumentSymbolsIndex, and SemanticIndex.
+- Facet 0.1.5 produces tolerant parser diagnostics and spans.
+
+This split is intentional while Facet compatibility is still being measured. A
+deeper integration should introduce a Facet-backed adapter or parallel semantic
+index before removing the Crystal AST path.

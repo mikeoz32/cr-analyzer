@@ -28,8 +28,8 @@ Active development. Implemented LSP features include completion (with resolve), 
 - Type hierarchy (prepare/super/sub types).
 - Rename (prepare + apply; best-effort for locals, ivars, methods, type paths in workspace).
 - Diagnostics:
-  - Syntax/parser errors (Crystal parser or facet parser fallback).
-  - Facet-based diagnostics + lint-style warnings (TODO/FIXME, empty rescue, trailing whitespace, duplicate `require`, missing final newline, mixed indentation, unused def/block args).
+  - Facet 0.1.5 parser diagnostics by default, with Crystal::Parser as a fallback.
+  - Lint-style warnings (TODO/FIXME, empty rescue, trailing whitespace, duplicate `require`, missing final newline, mixed indentation, unused def/block args).
   - Both push and pull diagnostic flows supported.
 - Completion:
   - member methods on `.` and `::`
@@ -44,6 +44,7 @@ Active development. Implemented LSP features include completion (with resolve), 
 - No full compiler type checking or macro expansion. Type inference is best-effort based on annotations and simple assignments.
 - Macro expansion is limited to built-in macros (getter, setter, property, record) and a small interpreter for user-defined macros.
 - Rename is best-effort and currently scoped to workspace files (stdlib is not edited).
+- Facet currently supplies diagnostics only. Semantic indexing and editor navigation still consume `Crystal::ASTNode` from Crystal::Parser.
 
 ## Usage
 

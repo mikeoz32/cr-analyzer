@@ -26,6 +26,7 @@ theme:
 nav:
   - Home: index.md
   - Architecture: architecture.md
+  - Facet Integration: facet-integration.md
   - Semantic Index: semantic-index.md
   - LSP Server: lsp-server.md
   - Roadmap: roadmap.md

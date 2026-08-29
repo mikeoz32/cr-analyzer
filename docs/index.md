@@ -30,6 +30,7 @@ Uses `CRYSTAL_PATH` or `CRYSTAL_HOME`; falls back to `/usr/share/crystal/src`.
 ## Docs
 
 - [Architecture](architecture.md)
+- [Facet Integration](facet-integration.md)
 - [Semantic Index](semantic-index.md)
 - [LSP Server](lsp-server.md)
 - [Roadmap](roadmap.md)
@@ -43,4 +44,4 @@ mkdocs serve
 
 ## Roadmap snapshot
 
-See the full [roadmap](roadmap.md) for the long list. Next priorities often include references/call hierarchy polish, diagnostics improvements, and richer completion/hover details.
+See the full [roadmap](roadmap.md) for the long list. Current opportunities include semantic tokens, folding ranges, inlay hints, code actions, and deeper Facet-backed parsing/indexing.

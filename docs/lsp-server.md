@@ -35,8 +35,9 @@ ServerCapabilities are kept in sync with implemented handlers. Notable gaps: sem
 
 ## Diagnostics
 
-- Default: Facet parser/diagnostics with syntax errors and lint-style warnings (TODO/FIXME, empty rescue, trailing whitespace, duplicate require, missing final newline, mixed indentation, unused args/block args).
-- Fallback: Crystal parser only when `CRA_DISABLE_FACET_DIAGNOSTICS=1`.
+- Default: Facet 0.1.5 parser diagnostics plus lint-style warnings (TODO/FIXME, empty rescue, trailing whitespace, duplicate require, missing final newline, mixed indentation, unused args/block args).
+- Fallback: Crystal::Parser when Facet diagnostics fail internally or when `CRA_DISABLE_FACET_DIAGNOSTICS=1`.
+- Scope: Facet does not yet provide the AST used by completion, navigation, rename, or symbols.
 
 ## Manual testing
 
