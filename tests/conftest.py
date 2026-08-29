@@ -12,14 +12,11 @@ from lsprotocol.types import (
 from pygls.lsp.client import LanguageClient
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-CRYSTAL_SRC = PROJECT_ROOT / "src" / "cr-analyzer.cr"
+SERVER_ENTRYPOINT = PROJECT_ROOT / "src" / "bin" / "cra.cr"
 
 
 def _server_env() -> dict[str, str]:
-    return {
-        **os.environ,
-        "CRA_RUN_SERVER": "1",
-    }
+    return dict(os.environ)
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -31,7 +28,7 @@ async def lsp_client():
         "run",
         "-Dpreview_mt",
         "-Dexecution_context",
-        str(CRYSTAL_SRC),
+        str(SERVER_ENTRYPOINT),
         env=_server_env(),
         cwd=str(PROJECT_ROOT),
     )
@@ -74,21 +71,43 @@ async def lsp_client():
         yield client
     finally:
         print("[fixture] tearing down")
-        # Avoid shutdown/exit to prevent hangs; just stop the client and wait for process
-        await client.stop()
+        stop_event = getattr(client, "_stop_event", None)
+        if stop_event:
+            stop_event.set()
+
         if server:
-            try:
-                await asyncio.wait_for(server.wait(), timeout=5)
-            except asyncio.TimeoutError:
-                print("[fixture] server wait timed out; killing")
-                server.kill()
-                await server.wait()
+            if server.stdin:
+                server.stdin.close()
+                try:
+                    await server.stdin.wait_closed()
+                except (BrokenPipeError, ConnectionResetError):
+                    pass
+
+            if server.returncode is None:
+                server.terminate()
+                try:
+                    await asyncio.wait_for(server.wait(), timeout=5)
+                except asyncio.TimeoutError:
+                    print("[fixture] server wait timed out; killing")
+                    server.kill()
+                    await server.wait()
 
             if server.returncode and server.stderr:
                 err = await server.stderr.read()
                 if err:
                     print("[fixture] server stderr during teardown:\n", err.decode())
+
+        async_tasks = getattr(client, "_async_tasks", [])
+        for task in async_tasks:
+            if not task.done():
+                task.cancel()
+        if async_tasks:
+            await asyncio.gather(*async_tasks, return_exceptions=True)
+
         if stderr_task:
-            await stderr_task
+            if not stderr_task.done():
+                stderr_task.cancel()
+            await asyncio.gather(stderr_task, return_exceptions=True)
+
         # Ensure event loop sees completion
         await asyncio.sleep(0)
