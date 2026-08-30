@@ -92,6 +92,48 @@ describe CRA::Workspace do
     end
   end
 
+  it "preserves opaque generic types in Facet macro-generated methods" do
+    code = <<-CRYSTAL
+      class Item
+        def ping
+        end
+      end
+
+      class Container(T)
+        def first : T
+        end
+      end
+
+      macro make_reader(name, type)
+        def {{name.id}} : {{type}}
+        end
+      end
+
+      class Box
+        make_reader items, Container(Item)
+      end
+
+      def call(box : Box)
+        box.items.first.pi
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "macro_generic.cr")
+      File.write(path, code)
+      workspace = workspace_for(dir)
+      uri = "file://#{path}"
+      index = index_for(code, "box.items.first.pi") + "box.items.first.pi".size
+
+      items = workspace.complete(completion_request(uri, position_for(code, index), "."))
+
+      labels(items).should contain("ping")
+      generated = workspace.facet_analyzer.find_class("Box").not_nil!.methods.find { |method| method.name == "items" }.not_nil!
+      generated.return_type.should eq("Container(Item)")
+      generated.file.not_nil!.should start_with("facet-macro:")
+    end
+  end
+
   it "completes instance methods on typed locals" do
     code = <<-CRYSTAL
       class Greeter

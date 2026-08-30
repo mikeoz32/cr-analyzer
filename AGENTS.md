@@ -62,7 +62,8 @@ unsupported inference shapes, and remaining semantic consumers.
 - TypeRef is lightweight: name + generic args + union types. Inference is best-effort (annotations, Foo.new, Array/Hash literals with of).
 - Facet expands standard declaration macros and the supported user-macro subset;
   generated declarations are indexed under `facet-macro:` URIs. Unsupported
-  legacy expansions remain under `crystal-macro:` URIs.
+  AST arguments are preserved as source-backed values; unsupported type-aware
+  expansions remain under `crystal-macro:` URIs.
 
 ## Parser boundary
 

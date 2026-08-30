@@ -86,10 +86,12 @@ editor startup from eagerly expanding the entire toolchain.
   by Crystal::Parser.
 - Ordinary and bare user macro calls resolve by lexical scope and arity in
   Facet; standard accessor families and `record` have Facet-native lowering.
+  Macro arguments outside the evaluator subset remain source-backed AST values,
+  so generic types and nested expressions survive generated declarations.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.
-- The complete workspace LSP contract runs with no Crystal AST: 95/95 examples
+- The complete workspace LSP contract runs with no Crystal AST: 96/96 examples
   cover completion, navigation, diagnostics/lints, symbols, references, rename,
   inline values, call/type hierarchy, macro-generated declarations, and
   dependent reindexing.
