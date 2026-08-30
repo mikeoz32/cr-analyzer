@@ -52,5 +52,9 @@ module CRA
     def file_id(uri : String) : Facet::Compiler::FileId?
       @files_by_uri[uri]?
     end
+
+    def revision(uri : String) : UInt64?
+      @files_by_uri[uri]?.try { |file_id| @manager.revision(file_id) }
+    end
   end
 end

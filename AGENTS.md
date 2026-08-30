@@ -12,7 +12,7 @@ semantic index. Facet owns completion syntax and common inference, navigation,
 hover, signature help, references, rename, highlights, and type hierarchy,
 including error-tolerant buffers rejected by Crystal::Parser. The Crystal path
 remains an explicit fallback for macro-generated declarations, unsupported
-inference shapes, call-graph construction, and remaining semantic consumers.
+inference shapes, and remaining semantic consumers.
 
 ## Setup
 
@@ -47,7 +47,8 @@ inference shapes, call-graph construction, and remaining semantic consumers.
   -> providers; legacy NodeFinder remains a fallback for unsupported shapes.
 - navigation/hover/signature/references/rename/type hierarchy -> FacetNodeFinder
   -> Facet semantic index/occurrence collector; legacy NodeFinder is fallback.
-- call hierarchy edges -> temporary Crystal AST consumer.
+- call hierarchy edges -> per-file Facet call-site cache -> lazy revision-cached
+  semantic resolution; legacy Crystal edges are fallback only for legacy items.
 - diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
 
 ## Semantic Index notes
@@ -72,7 +73,11 @@ inference shapes, call-graph construction, and remaining semantic consumers.
 - Facet's declaration-level semantic producer is the primary completion and
   navigation index for types, methods, aliases, includes, inheritance, enum
   members, docs, and locations. Keep the Crystal index as a measured fallback
-  until macro expansion and call-graph consumers move.
+  until macro expansion and the remaining semantic consumers move.
+- Facet call-graph extraction is file-grained. Preserve call sites for unchanged
+  files and invalidate the lazily resolved edge set when any indexed file
+  revision changes; an authoritative empty Facet result must not fall back to a
+  stale Crystal edge.
 - `CRA_DISABLE_FACET_DIAGNOSTICS=1` switches diagnostics back to Crystal::Parser.
 - Facet's native AST is intentionally different from Crystal's AST. Extend its
   `SyntaxTree` / `SyntaxNode` query facade instead of emulating Crystal nodes or

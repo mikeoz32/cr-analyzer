@@ -47,10 +47,10 @@ Active development. Implemented LSP features include completion (with resolve), 
 - Facet owns the incremental document store, cached syntax/diagnostics, UTF-16
   mapping, cursor lookup, selection ranges, symbols, and the primary declaration
   semantic index. Completion, navigation, hover, signature help, references,
-  rename, highlights, and type hierarchy are Facet-first and work in many
-  Crystal-rejected incomplete buffers. The temporary Crystal AST remains for
-  macro-generated declarations, unsupported inference fallback, call-graph
-  construction, and remaining cutover work.
+  rename, highlights, type hierarchy, and the incrementally invalidated call
+  graph are Facet-first and work in many Crystal-rejected incomplete buffers.
+  The temporary Crystal AST remains for macro-generated declarations,
+  unsupported inference fallback, and remaining cutover work.
 
 ## Usage
 

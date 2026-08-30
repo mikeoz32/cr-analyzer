@@ -26,7 +26,7 @@ roles, spans, and symbols.
 | Navigation, hover, signature help, type hierarchy | Facet-first semantic resolution; Crystal fallback remains |
 | References, rename, document highlights | Facet-first scope-aware occurrence collection; Crystal fallback remains |
 | Inline values | Facet syntax plus semantic local classification |
-| Call graph | Temporary Crystal AST consumer |
+| Call graph | Facet per-file call-site cache plus lazy revision-cached semantic resolution; Crystal fallback for legacy items |
 | Macro support | Separate cr-analyzer interpreter; Facet expansion is not consumed yet |
 
 Each URI has a stable Facet `FileId`. A document version is parsed once and its
@@ -59,7 +59,7 @@ unrelated macro expansions stay cached.
   parity for types, methods, aliases, includes, inheritance, enum members, docs,
   locations, nested names, and reopen-file invalidation.
 - The reusable `scripts/check_facet_semantic_parity.cr` corpus gate; the current
-  cr-analyzer source/spec corpus is exact on 66/66 Crystal-accepted files, with
+  cr-analyzer source/spec corpus is exact on 68/68 Crystal-accepted files, with
   one additional Facet recovery from a Crystal-rejected file.
 - Tested document-symbol and selection-range behavior on incomplete buffers
   rejected by Crystal::Parser.
@@ -74,13 +74,18 @@ unrelated macro expansions stay cached.
   references, rename, highlights, document/workspace symbols, and type hierarchy,
   with regression tests that explicitly remove the Crystal AST.
 - Facet-native inline-value collection for parameters, locals, and scoped vars.
+- Facet-native incoming/outgoing call hierarchy with per-file extraction, lazy
+  edge caching, edit invalidation, cross-file typed receivers, constructors,
+  class methods, `super`, and authoritative empty results in buffers rejected
+  by Crystal::Parser.
 
 ## Remaining cutover work
 
 1. Extend Facet inference across the remaining literal, implicit-call, destructure,
    and control-flow shapes, then retire the completion fallback.
-2. Build an incrementally invalidated call graph from Facet rather than retaining
-   the Crystal visitor or rebuilding every file after each edit.
+2. Extend call-graph differential coverage across overloads, dynamic receivers,
+   macro-generated methods, and representative workspaces, then retire its
+   legacy Crystal fallback.
 3. Compare Facet-first public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
 4. Feed Facet's fully expanded AST into semantic indexing, then remove the

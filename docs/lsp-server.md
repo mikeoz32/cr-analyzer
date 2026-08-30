@@ -40,10 +40,11 @@ ServerCapabilities are kept in sync with implemented handlers. Notable gaps: sem
 - Scope: Facet now provides cached syntax, cursor lookup, selection ranges, and
   document/workspace symbols, plus the primary declaration semantic index.
   Completion, navigation, hover, signature help, references, rename, highlights,
-  inline values, and type hierarchy use Facet first, including tested
-  Crystal-rejected buffers.
-  Macro-generated declarations, unsupported inference, call-graph edges, and
-  remaining fallbacks still use the temporary Crystal AST path during cutover.
+  inline values, type hierarchy, and call hierarchy use Facet first, including
+  tested Crystal-rejected buffers. Call sites are cached per file and semantic
+  edges are resolved lazily per workspace revision.
+  Macro-generated declarations, unsupported inference, and remaining fallbacks
+  still use the temporary Crystal AST path during cutover.
 
 ## Manual testing
 

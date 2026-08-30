@@ -2,7 +2,8 @@
 
 SemanticIndex is the core semantic database used for completion and definition.
 The Facet-native producer populates the primary editor index; the temporary
-Crystal producer remains as a fallback for macro expansion and call-graph work.
+Crystal producer remains as a fallback for macro expansion and unsupported
+semantic shapes.
 
 ## Data model
 
@@ -16,7 +17,9 @@ Crystal producer remains as a fallback for macro expansion and call-graph work.
 - FacetSemanticIndexer semantic pass: attaches methods, includes, inheritance,
   enum members, and aliases.
 - Legacy SkeletonIndexer/SemanticIndexer: retains macro-expanded declarations
-  and call edges until the expansion cutover is complete.
+  until the expansion cutover is complete.
+- FacetCallGraphIndex: replaces call sites only for reindexed files, then lazily
+  resolves and revision-caches incoming/outgoing semantic edges.
 - Macro pre-expansion: expands supported macros into virtual files for indexing.
 
 ## Type hints
@@ -38,7 +41,7 @@ find_definitions resolves:
 - methods with arity filtering, including inherited methods (including class vs instance, includes, superclasses)
 - locals, instance vars, class vars
 - constructors (new -> initialize/self.new)
-- call hierarchy edges (outgoing/incoming) via resolved calls
+- call hierarchy edges (outgoing/incoming) via Facet-resolved calls
 - references for types/aliases across files (path matching)
 
 ## Dependencies

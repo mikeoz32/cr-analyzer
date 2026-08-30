@@ -12,12 +12,15 @@ require "./workspace/facet_document_store"
 require "./workspace/document_symbols_index"
 require "./workspace/facet_document_symbols_index"
 require "./workspace/facet_symbol_occurrences"
+require "./workspace/facet_call_graph_index"
 require "./workspace/keyword_completion_provider"
 require "./workspace/require_path_completion_provider"
 require "./workspace/rename"
 
 module CRA
   class Workspace
+    getter facet_call_graph : FacetCallGraphIndex
+
     Log = ::Log.for("CRA::Workspace")
 
     @completion_providers : Array(CompletionProvider) = [] of CompletionProvider
@@ -39,6 +42,7 @@ module CRA
       @facet_store = FacetDocumentStore.new
       @indexer = DocumentSymbolsIndex.new
       @facet_indexer = FacetDocumentSymbolsIndex.new
+      @facet_call_graph = FacetCallGraphIndex.new
       @analyzer = Psi::SemanticIndex.new
       @facet_analyzer = Psi::SemanticIndex.new
       @completion_providers << @facet_analyzer
@@ -125,6 +129,7 @@ module CRA
       if syntax = @facet_store.syntax(uri)
         @facet_indexer.index(uri, syntax)
         index_facet_semantics(uri, syntax)
+        @facet_call_graph.index(uri, syntax, @facet_store.revision(uri).not_nil!)
       end
       parser = Crystal::Parser.new(content)
       parser.wants_doc = true
@@ -184,6 +189,7 @@ module CRA
       if syntax = @facet_store.syntax(uri)
         @facet_indexer.index(uri, syntax)
         index_facet_semantics(uri, syntax)
+        @facet_call_graph.index(uri, syntax, @facet_store.revision(uri).not_nil!)
       end
       reindexed << uri
       return reindexed unless program
@@ -210,7 +216,11 @@ module CRA
         begin
           dep_content = File.read(dep_path)
           @facet_store.register(dep_uri, dep_content, dep_path)
-          index_facet_semantics(dep_uri)
+          if dep_syntax = @facet_store.syntax(dep_uri)
+            @facet_indexer.index(dep_uri, dep_syntax)
+            index_facet_semantics(dep_uri, dep_syntax)
+            @facet_call_graph.index(dep_uri, dep_syntax, @facet_store.revision(dep_uri).not_nil!)
+          end
           dep_parser = Crystal::Parser.new(dep_content)
           dep_parser.wants_doc = true
           dep_program = dep_parser.parse
@@ -610,7 +620,7 @@ module CRA
 
       facet_definitions = facet_navigation_elements(document, request.position, request.text_document.uri, :definition)
       unless facet_definitions.empty?
-        items = facet_definitions.compact_map { |definition| call_hierarchy_item(definition) }
+        items = facet_definitions.compact_map { |definition| call_hierarchy_item(definition, facet: true) }
         return items unless items.empty?
       end
 
@@ -639,12 +649,15 @@ module CRA
     end
 
     def call_hierarchy_incoming(_request : Types::CallHierarchyIncomingCallsRequest) : Array(Types::CallHierarchyIncomingCall)
-      methods = @analyzer.call_hierarchy_incoming_methods(_request.item)
+      facet_item = facet_call_hierarchy_item?(_request.item)
+      methods = @facet_call_graph.incoming(_request.item, @facet_analyzer)
+      used_facet = facet_item || !methods.empty?
+      methods = @analyzer.call_hierarchy_incoming_methods(_request.item) if methods.empty? && !facet_item
       calls = [] of Types::CallHierarchyIncomingCall
       methods.each do |entry|
         method = entry[:method]
         ranges = entry[:ranges]
-        if item = call_hierarchy_item(method)
+        if item = call_hierarchy_item(method, facet: used_facet)
           from_ranges = ranges.empty? ? (method.location.try(&.to_range) ? [method.location.not_nil!.to_range] : [] of Types::Range) : ranges
           calls << Types::CallHierarchyIncomingCall.new(item, from_ranges)
         end
@@ -653,13 +666,16 @@ module CRA
     end
 
     def call_hierarchy_outgoing(_request : Types::CallHierarchyOutgoingCallsRequest) : Array(Types::CallHierarchyOutgoingCall)
-      methods = @analyzer.call_hierarchy_outgoing_methods(_request.item)
+      facet_item = facet_call_hierarchy_item?(_request.item)
+      methods = @facet_call_graph.outgoing(_request.item, @facet_analyzer)
+      used_facet = facet_item || !methods.empty?
+      methods = @analyzer.call_hierarchy_outgoing_methods(_request.item) if methods.empty? && !facet_item
       calls = [] of Types::CallHierarchyOutgoingCall
       fallback_from = _request.item.selection_range
       methods.each do |entry|
         method = entry[:method]
         ranges = entry[:ranges]
-        if item = call_hierarchy_item(method)
+        if item = call_hierarchy_item(method, facet: used_facet)
           from_ranges = ranges.empty? ? [fallback_from] : ranges
           calls << Types::CallHierarchyOutgoingCall.new(item, from_ranges)
         end
@@ -1415,20 +1431,28 @@ module CRA
         left.end_position.character == right.end_position.character
     end
 
-    private def call_hierarchy_item(element : Psi::PsiElement) : Types::CallHierarchyItem?
+    private def call_hierarchy_item(element : Psi::PsiElement, facet : Bool = false) : Types::CallHierarchyItem?
       loc = element.location
       file = element.file
       return nil unless loc && file
       uri = file.starts_with?("file://") ? file : "file://#{file}"
       range = loc.to_range
+      data = if facet && (method = element.as?(Psi::Method))
+               JSON::Any.new({"facetMethodKey" => JSON::Any.new(method_key(method.owner.try(&.name) || "", method.class_method, method.name))})
+             end
       Types::CallHierarchyItem.new(
         name: element.name,
         kind: symbol_kind_for(element),
         uri: uri,
         range: range,
         selection_range: range,
-        detail: element.responds_to?(:owner) ? element.owner.try(&.name) : nil
+        detail: element.responds_to?(:owner) ? element.owner.try(&.name) : nil,
+        data: data
       )
+    end
+
+    private def facet_call_hierarchy_item?(item : Types::CallHierarchyItem) : Bool
+      item.data.try(&.as_h?).try(&.has_key?("facetMethodKey")) || false
     end
 
     private def type_hierarchy_item(element : Psi::PsiElement) : Types::TypeHierarchyItem?
