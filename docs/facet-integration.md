@@ -22,8 +22,9 @@ roles, spans, and symbols.
 | Declaration semantic index | Facet shadow index for types, methods, aliases, includes, inheritance, enum members, docs, and locations |
 | Workspace symbols | Crystal document-symbol index while public-result parity is measured |
 | Completion prefixes, enclosing syntax, keywords | Facet `LineIndex` + `FacetNodeFinder` + named condition roles |
-| Receiver/member completion, navigation, references, rename | Crystal AST consumers being migrated |
-| Locals, calls, inference, and call graph | Crystal AST consumers being migrated |
+| Receiver/member and named-argument completion | Facet-first named receiver/call/parameter roles; Crystal fallback for unsupported inference shapes |
+| Locals and scoped variables | Facet local-name collection and typed/constructor assignment inference, including incomplete buffers |
+| Navigation, references, rename, and call graph | Crystal AST consumers being migrated |
 | Macro support | Separate cr-analyzer interpreter; Facet expansion is not consumed yet |
 
 Each URI has a stable Facet `FileId`. A document version is parsed once and its
@@ -43,8 +44,8 @@ unrelated macro expansions stay cached.
   cases, including exact diagnostics for 941 rejected inputs.
 - Exact common semantic AST projection on all 3,437 accepted upstream inputs.
 - Clean parse and native AST integrity across all 1,625 Crystal stdlib files.
-- Clean parse and native AST integrity across all 118 Facet and cr-analyzer
-  source/spec files measured before this integration slice.
+- Clean parse and native AST integrity across all Facet and cr-analyzer
+  source/spec files in the corpus.
 - Stable declaration roles, parent/ancestor traversal, cursor lookup, name
   spans, doc comments, and UTF-16 conversion in Facet syntax queries.
 - Automatic revision-based parse/syntax/index/expand cache invalidation.
@@ -56,17 +57,21 @@ unrelated macro expansions stay cached.
   parity for types, methods, aliases, includes, inheritance, enum members, docs,
   locations, nested names, and reopen-file invalidation.
 - The reusable `scripts/check_facet_semantic_parity.cr` corpus gate; the current
-  cr-analyzer source/spec corpus is exact on 60/60 Crystal-accepted files, with
+  cr-analyzer source/spec corpus is exact on 62/62 Crystal-accepted files, with
   one additional Facet recovery from a Crystal-rejected file.
 - Tested document-symbol and selection-range behavior on incomplete buffers
   rejected by Crystal::Parser.
 - Facet-backed completion prefixes, enclosing type context, and keyword-context
   classification, including incomplete conditions and astral UTF-16 positions.
+- Facet-first receiver/member and named-argument completion, including typed and
+  constructor-assigned locals, chained generic returns, local names, and
+  instance/class variables in buffers rejected by Crystal::Parser.
 
 ## Remaining cutover work
 
-1. Port receiver/call/local roles used by member and named-argument completion.
-2. Reuse those Facet roles for inference, navigation, references, and rename.
+1. Extend Facet inference to block-yield parameter types and remaining literal,
+   call, and control-flow shapes, then retire the completion fallback.
+2. Reuse Facet roles for navigation, references, rename, and call graphs.
 3. Compare shadow semantic and public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
 4. Make Facet authoritative feature by feature, retaining an explicit rollback

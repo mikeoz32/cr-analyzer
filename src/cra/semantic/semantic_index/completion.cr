@@ -5,7 +5,12 @@ module CRA::Psi
 
       trigger = context.trigger_character
 
-      # Named argument completion inside a call.
+      if facet_call = facet_call_for_context(context)
+        items = complete_facet_named_arguments(context, facet_call)
+        return items unless items.empty?
+      end
+
+      # Crystal fallback for syntax contexts not yet represented by Facet.
       if call = call_for_context(context)
         if items = complete_named_arguments(context, call)
           return items unless items.empty?
@@ -15,6 +20,10 @@ module CRA::Psi
       case trigger
       when "."
         prefix = context.member_prefix(trigger)
+        if owner_info = facet_member_owner_info(context)
+          owner, class_method = owner_info
+          return complete_members_for_owner(owner, class_method, prefix)
+        end
         receiver = receiver_for_dot(context, prefix)
         return complete_members(context, prefix, receiver)
       when "::"
@@ -32,6 +41,11 @@ module CRA::Psi
         if receiver = call.obj
           return complete_members(context, context.word_prefix, receiver)
         end
+      end
+
+      if owner_info = facet_member_owner_info(context)
+        owner, class_method = owner_info
+        return complete_members_for_owner(owner, class_method, context.word_prefix)
       end
 
       complete_general(context)
@@ -135,6 +149,14 @@ module CRA::Psi
       return [] of CRA::Types::CompletionItem unless owner_info
 
       owner, class_method = owner_info
+      complete_members_for_owner(owner, class_method, prefix)
+    end
+
+    private def complete_members_for_owner(
+      owner : CRA::Psi::PsiElement,
+      class_method : Bool,
+      prefix : String,
+    ) : Array(CRA::Types::CompletionItem)
       methods = methods_with_ancestors(owner, class_method)
       items = [] of CRA::Types::CompletionItem
       seen = {} of String => Bool
@@ -202,6 +224,9 @@ module CRA::Psi
     end
 
     private def complete_instance_vars(context : CRA::CompletionContext, prefix : String) : Array(CRA::Types::CompletionItem)
+      if facet_items = complete_facet_scoped_variables(context, prefix, prefix.starts_with?("@@"))
+        return facet_items unless facet_items.empty?
+      end
       scope_class = context.enclosing_class
       return [] of CRA::Types::CompletionItem unless scope_class
 
@@ -260,6 +285,14 @@ module CRA::Psi
         end
       elsif prefix.starts_with?("@")
         return complete_instance_vars(context, prefix)
+      end
+
+      facet_local_names(context).each do |name|
+        next unless name.starts_with?(prefix)
+        items << CRA::Types::CompletionItem.new(
+          label: name,
+          kind: CRA::Types::CompletionItemKind::Variable
+        )
       end
 
       if scope_def = context.enclosing_def

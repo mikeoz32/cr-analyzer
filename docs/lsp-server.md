@@ -39,9 +39,10 @@ ServerCapabilities are kept in sync with implemented handlers. Notable gaps: sem
 - Fallback: Crystal::Parser when Facet diagnostics fail internally or when `CRA_DISABLE_FACET_DIAGNOSTICS=1`.
 - Scope: Facet now provides cached syntax, cursor lookup, selection ranges, and
   document-symbol fallback, plus a declaration semantic shadow index and
-  completion keyword/enclosing-syntax context. Receiver/member completion,
-  navigation, rename, locals/calls, and inference remain on the temporary
-  Crystal AST path during cutover.
+  completion keyword/enclosing-syntax context. Receiver/member and named-argument
+  completion use Facet first, with Facet local/scoped-variable inference for
+  common forms and incomplete buffers. Unsupported inference shapes, navigation,
+  references, rename, and call graphs remain on the temporary Crystal AST path.
 
 ## Manual testing
 

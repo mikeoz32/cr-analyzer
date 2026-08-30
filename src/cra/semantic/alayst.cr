@@ -1,6 +1,7 @@
 require "./ast"
 require "./extensions"
 require "./type_ref_helper"
+require "./facet_type_ref_helper"
 require "./semantic_index"
 require "./indexers"
 require "./facet_indexer"

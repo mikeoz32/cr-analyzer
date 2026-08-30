@@ -53,6 +53,21 @@ describe CRA::FacetDocumentStore do
     end
   end
 
+  it "keeps the completed expression at a cursor token boundary" do
+    with_tmpdir do |dir|
+      path = File.join(dir, "cursor.cr")
+      code = "def demo\n  client.fetch\nend\n"
+      File.write(path, code)
+      document = workspace_for(dir).document("file://#{path}").not_nil!
+      offset = code.byte_index("client.fetch").not_nil! + "client.fetch".bytesize
+      position = document.facet_syntax.not_nil!.position_at(offset)
+      finder = document.facet_node_context(CRA::Types::Position.new(position.line, position.character)).not_nil!
+
+      access = finder.context_path.reverse_each.find { |node| node.call_name == "fetch" }.not_nil!
+      access.receiver.try(&.symbol_name).should eq("client")
+    end
+  end
+
   it "reindexes the Facet semantic shadow from the current disk revision" do
     with_tmpdir do |dir|
       path = File.join(dir, "semantic.cr")

@@ -299,6 +299,168 @@ describe CRA::Workspace do
     end
   end
 
+  it "completes Facet-inferred local receivers in a Crystal-rejected buffer" do
+    complete_code = <<-CRYSTAL
+      class Client
+        def fetch; end
+      end
+
+      def demo
+        client = Client.new
+        client.fe
+      end
+    CRYSTAL
+    editing_code = complete_code + "broken(\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "facet_local_receiver.cr")
+      File.write(path, complete_code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(editing_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      index = index_for(editing_code, "client.fe") + "client.fe".size
+      items = workspace.complete(completion_request(uri, position_for(editing_code, index), "."))
+
+      labels(items).should contain("fetch")
+    end
+  end
+
+  it "completes named arguments from a Facet call in an incomplete buffer" do
+    complete_code = <<-CRYSTAL
+      class Client
+        def fetch(limit : Int32, label : String); end
+      end
+
+      def demo(client : Client)
+        client.fetch(limit: 1, label: "ok")
+      end
+    CRYSTAL
+    editing_code = complete_code.sub("limit: 1, label: \"ok\")", "limit: 1, la")
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "facet_named_argument.cr")
+      File.write(path, complete_code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(editing_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      index = index_for(editing_code, "limit: 1, la") + "limit: 1, la".size
+      items = workspace.complete(completion_request(uri, position_for(editing_code, index)))
+
+      labels(items).should contain("label:")
+      labels(items).should_not contain("limit:")
+    end
+  end
+
+  it "infers chained generic return types through Facet calls" do
+    complete_code = <<-CRYSTAL
+      class Item
+        def ping; end
+      end
+
+      class Container(T)
+        def value : T; end
+      end
+
+      def demo
+        container = Container(Item).new
+        container.value.pi
+      end
+    CRYSTAL
+    editing_code = complete_code + "broken(\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "facet_generic_chain.cr")
+      File.write(path, complete_code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(editing_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      index = index_for(editing_code, "container.value.pi") + "container.value.pi".size
+      items = workspace.complete(completion_request(uri, position_for(editing_code, index), "."))
+
+      labels(items).should contain("ping")
+    end
+  end
+
+  it "completes Facet local names in a Crystal-rejected buffer" do
+    complete_code = <<-CRYSTAL
+      def demo
+        mystery = unknown_call
+        mys
+      end
+    CRYSTAL
+    editing_code = complete_code + "broken(\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "facet_local_name.cr")
+      File.write(path, complete_code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(editing_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      index = index_for(editing_code, "mys") + "mys".size
+      items = workspace.complete(completion_request(uri, position_for(editing_code, index)))
+
+      labels(items).should contain("mystery")
+    end
+  end
+
+  it "completes Facet instance and class variables in a Crystal-rejected buffer" do
+    complete_code = <<-CRYSTAL
+      class Box
+        def initialize(@bar : Int32)
+          @@baz = 1
+        end
+
+        def instance_value
+          @ba
+        end
+
+        def class_value
+          @@ba
+        end
+      end
+    CRYSTAL
+    editing_code = complete_code + "broken(\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "facet_scoped_variables.cr")
+      File.write(path, complete_code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(editing_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      instance_index = index_for(editing_code, "@ba") + "@ba".size
+      instance_items = workspace.complete(
+        completion_request(uri, position_for(editing_code, instance_index), "@")
+      )
+      labels(instance_items).should contain("@bar")
+
+      class_index = index_for(editing_code, "@@ba") + "@@ba".size
+      class_items = workspace.complete(
+        completion_request(uri, position_for(editing_code, class_index), "@")
+      )
+      labels(class_items).should contain("@@baz")
+    end
+  end
+
   it "completes alias types" do
     code = <<-CRYSTAL
       alias Token = String

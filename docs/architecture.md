@@ -22,8 +22,9 @@ This document describes the major runtime pieces and the request flow.
 1. Initialize -> Workspace.scan -> parse and index project, lib, and stdlib files.
 2. didOpen/didChange/didSave -> update document text -> parse -> Workspace.reindex_file.
 3. selection ranges -> FacetNodeFinder -> Facet syntax spans.
-4. completion -> FacetNodeFinder for prefixes/enclosing/keyword context plus
-   legacy NodeFinder for receiver/local inference -> CompletionContext -> providers.
+4. completion -> FacetNodeFinder for prefixes, enclosing/keyword context,
+   receiver/call roles, and local/scoped-variable inference -> CompletionContext
+   -> providers; legacy NodeFinder handles unsupported inference shapes.
 5. definition/declaration/implementation/typeDefinition -> legacy NodeFinder -> SemanticIndex.find_definitions.
 6. references -> legacy NodeFinder -> Workspace/SemanticIndex references.
 7. call hierarchy -> SemanticIndex call graph.
@@ -47,9 +48,11 @@ The server currently maintains two syntax paths during cutover:
 - Facet owns source revisions, parsing, diagnostics, `SyntaxTree`,
   `FacetNodeFinder`, selection ranges, document-symbol fallback, and a shadow
   declaration semantic producer. It also owns completion prefix, enclosing-syntax,
-  and keyword-context queries.
+  keyword-context, receiver/call roles, local names, scoped variables, and common
+  best-effort receiver inference.
 - Crystal::Parser produces the temporary `Crystal::ASTNode` tree consumed by
-  completion, navigation, rename, and SemanticIndex.
+  the remaining completion fallback, navigation, references, rename, call graphs,
+  and other SemanticIndex consumers.
 
 Facet's AST remains native and arena-backed; cr-analyzer consumes its stable
 named query API rather than a Crystal AST compatibility layer. The Crystal path

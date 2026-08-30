@@ -1,11 +1,14 @@
 require "facet/compiler"
 require "./semantic_index"
+require "./facet_type_ref_helper"
 
 module CRA::Psi
   # Declaration-level SemanticIndex producer for Facet's native AST. This is a
   # parallel index during cutover; it intentionally stores semantic names,
   # TypeRefs, and Locations rather than syntax nodes.
   class FacetSemanticIndexer
+    include FacetTypeRefHelper
+
     def initialize(@index : SemanticIndex)
       @owners = [] of PsiElement
     end
@@ -63,7 +66,7 @@ module CRA::Psi
         with_owner(element) { node.body.try { |body| build_semantics(body) } }
       when Facet::Compiler::NodeKind::Alias, Facet::Compiler::NodeKind::TypeDef
         name = qualified_name(node.name.to_s)
-        target = node.child(1).try { |value| type_ref(value) }
+        target = node.child(1).try { |value| type_ref_from_facet(value) }
         @index.record_alias(name, target, location_for(node), node.doc)
       when Facet::Compiler::NodeKind::Def, Facet::Compiler::NodeKind::Fun
         add_method(node)
@@ -90,7 +93,7 @@ module CRA::Psi
         {Facet::Compiler::NodeKind::Splat, Facet::Compiler::NodeKind::DoubleSplat}.includes?(param.kind)
       end
       return_node = node.return_type
-      return_ref = return_node.try { |value| type_ref(value) }
+      return_ref = return_node.try { |value| type_ref_from_facet(value) }
       name_node = node.name_node
       method = CRA::Psi::Method.new(
         file: @index.current_file,
@@ -136,51 +139,6 @@ module CRA::Psi
           doc: candidate.doc
         )
         @index.attach(member, owner)
-      end
-    end
-
-    private def type_ref(node : Facet::Compiler::SyntaxNode) : TypeRef?
-      case node.kind
-      when Facet::Compiler::NodeKind::Ident, Facet::Compiler::NodeKind::Const,
-           Facet::Compiler::NodeKind::Path, Facet::Compiler::NodeKind::LiteralNil
-        name = node.kind == Facet::Compiler::NodeKind::LiteralNil ? "Nil" : node.symbol_name
-        name ? TypeRef.named(name) : nil
-      when Facet::Compiler::NodeKind::TypeApply
-        name = node.child(0).try(&.symbol_name)
-        return nil unless name
-        return TypeRef.named("NamedTuple") if name == "NamedTuple"
-        args = [] of TypeRef
-        (node.child(1).try(&.children) || [] of Facet::Compiler::SyntaxNode).each do |argument|
-          if value = type_ref(argument)
-            args << value
-          end
-        end
-        TypeRef.named(name, args)
-      when Facet::Compiler::NodeKind::Tuple
-        args = [] of TypeRef
-        node.children.each do |argument|
-          if value = type_ref(argument)
-            args << value
-          end
-        end
-        TypeRef.named("Tuple", args)
-      when Facet::Compiler::NodeKind::NamedTuple
-        TypeRef.named("NamedTuple")
-      when Facet::Compiler::NodeKind::Binary
-        payload = node.raw.payload_index
-        return nil unless payload.in?(0...tree.ast.arena.operators.size)
-        return nil unless tree.ast.arena.operator_kind(payload) == Facet::Compiler::TokenKind::Pipe
-        parts = [] of TypeRef
-        node.children.each do |part|
-          if value = type_ref(part)
-            parts << value
-          end
-        end
-        TypeRef.union(parts)
-      when Facet::Compiler::NodeKind::Splat
-        node.child(0).try { |value| type_ref(value) }
-      else
-        node.symbol_name.try { |name| TypeRef.named(name) }
       end
     end
 

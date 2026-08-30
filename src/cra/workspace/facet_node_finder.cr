@@ -14,7 +14,14 @@ module CRA
         Facet::Compiler::TextPosition.new(position.line, position.character),
         Facet::Compiler::PositionEncoding::Utf16
       )
-      @node = @tree.node_at(@byte_offset)
+      candidates = [] of Facet::Compiler::SyntaxNode
+      @tree.node_at(@byte_offset).try { |node| candidates << node }
+      if @byte_offset > 0
+        @tree.node_at(@byte_offset - 1).try do |node|
+          candidates << node unless candidates.any? { |candidate| candidate.id == node.id }
+        end
+      end
+      @node = candidates.min_by? { |node| {node.span.length, -node.ancestors.size} }
     end
 
     def context_path : Array(Facet::Compiler::SyntaxNode)

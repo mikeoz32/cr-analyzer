@@ -9,8 +9,11 @@ semantic index without invoking the full compiler. Facet 0.1.5 now provides a
 workspace-owned incremental syntax database, diagnostics, cursor lookup,
 selection ranges, document-symbol shadow/fallback results, and a declaration-level
 semantic shadow index. Facet also owns completion prefix/enclosing-syntax and
-keyword context. Crystal::Parser still provides the AST used by the remaining
-receiver, local-inference, navigation, and semantic features.
+keyword context. Receiver/member and named-argument completion now use Facet
+first, including typed and constructor-assigned locals, generic call returns,
+local names, and instance/class variables. Crystal::Parser still provides the
+fallback for unsupported inference shapes and the AST used by navigation,
+references, rename, call graphs, and remaining semantic features.
 
 ## Setup
 
@@ -40,8 +43,9 @@ receiver, local-inference, navigation, and semantic features.
 - Initialize -> Workspace.scan -> parse and index workspace, dependencies, and stdlib.
 - didOpen/didChange/didSave -> incremental LSP text edits -> revisioned Facet
   query plus temporary Crystal parse -> reindex the file and dependent types.
-- completion -> FacetNodeFinder for prefixes/enclosing/keyword context plus
-  legacy NodeFinder for receiver/local inference -> CompletionContext -> providers.
+- completion -> FacetNodeFinder for prefixes, enclosing/keyword context,
+  receiver/call roles, and local/scoped-variable inference -> CompletionContext
+  -> providers; legacy NodeFinder remains a fallback for unsupported shapes.
 - navigation/references/hierarchies -> NodeFinder -> SemanticIndex.
 - diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
 
@@ -60,6 +64,9 @@ receiver, local-inference, navigation, and semantic features.
   document-symbol fallback for incomplete buffers.
 - Completion line prefixes, enclosing type names, and keyword context come from
   Facet byte spans and UTF-16 conversion, including incomplete buffers.
+- Completion consumes Facet's named receiver, callee, arguments, named arguments,
+  parameter type/default, assignment, and variable roles. Keep Crystal fallback
+  explicit until unsupported inference forms have differential coverage.
 - Facet's declaration-level semantic producer runs in shadow mode for types,
   methods, aliases, includes, inheritance, enum members, docs, and locations.
 - `CRA_DISABLE_FACET_DIAGNOSTICS=1` switches diagnostics back to Crystal::Parser.
