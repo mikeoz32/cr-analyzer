@@ -12,16 +12,16 @@ module CRA::Psi
     @macro_expansion_depth : Int32 = 0
     MAX_MACRO_EXPANSION_DEPTH = 4
     # Tracks include/superclass relationships for ancestor method lookups.
-    @class_includes : Hash(String, Array(Crystal::ASTNode)) = {} of String => Array(Crystal::ASTNode)
-    @module_includes : Hash(String, Array(Crystal::ASTNode)) = {} of String => Array(Crystal::ASTNode)
-    @class_superclass : Hash(String, Crystal::ASTNode) = {} of String => Crystal::ASTNode
+    @class_includes : Hash(String, Array(String)) = {} of String => Array(String)
+    @module_includes : Hash(String, Array(String)) = {} of String => Array(String)
+    @class_superclass : Hash(String, String) = {} of String => String
     @elements_by_file : Hash(String, Array(PsiElement)) = {} of String => Array(PsiElement)
     @type_defs_by_name : Hash(String, Hash(String, TypeDefinition)) = {} of String => Hash(String, TypeDefinition)
     @types_by_file : Hash(String, Array(String)) = {} of String => Array(String)
     @aliases_by_name : Hash(String, Hash(String, CRA::Psi::Alias)) = {} of String => Hash(String, CRA::Psi::Alias)
     @aliases_by_file : Hash(String, Array(String)) = {} of String => Array(String)
     @includes_by_file : Hash(String, Array(IncludeEntry)) = {} of String => Array(IncludeEntry)
-    @superclass_defs : Hash(String, Hash(String, Crystal::ASTNode)) = {} of String => Hash(String, Crystal::ASTNode)
+    @superclass_defs : Hash(String, Hash(String, String)) = {} of String => Hash(String, String)
     @superclass_by_file : Hash(String, Array(String)) = {} of String => Array(String)
     @dependencies : Hash(String, Hash(String, Bool)) = {} of String => Hash(String, Bool)
     @reverse_dependencies : Hash(String, Hash(String, Bool)) = {} of String => Hash(String, Bool)
@@ -51,10 +51,10 @@ module CRA::Psi
 
     struct IncludeEntry
       getter owner_name : String
-      getter node : Crystal::ASTNode
+      getter name : String
       getter kind : Symbol
 
-      def initialize(@owner_name : String, @node : Crystal::ASTNode, @kind : Symbol)
+      def initialize(@owner_name : String, @name : String, @kind : Symbol)
       end
     end
 

@@ -12,6 +12,7 @@ module CRA
     class Processor
       @workspace : Workspace? = nil
       @client_capabilities : Types::ClientCapabilities? = nil
+
       def initialize(@server : Server)
       end
 
@@ -31,10 +32,10 @@ module CRA
         Log.error { "Handling completion request" }
         @workspace.try do |ws|
           return Types::Response.new(
-          request.id,
-          Types::CompletionList.new(
-            is_incomplete: false,
-            items: ws.complete(request)))
+            request.id,
+            Types::CompletionList.new(
+              is_incomplete: false,
+              items: ws.complete(request)))
         end
         Types::Response.new(
           request.id,
@@ -196,7 +197,7 @@ module CRA
       def handle(request : Types::DocumentSymbolRequest)
         Log.error { "Handling document symbol request" }
         @workspace.try do |ws|
-          symbols = ws.indexer.symbol_informations(request.text_document.uri)
+          symbols = ws.document_symbols(request.text_document.uri)
           Types::Response.new(
             request.id,
             symbols
@@ -410,7 +411,7 @@ module CRA
           capabilities: Types::ServerCapabilities.new(
             text_document_sync: Types::TextDocumentSyncOptions.new(
               open_close: true,
-              change: Types::TextDocumentSyncKind::Full,
+              change: Types::TextDocumentSyncKind::Incremental,
               save: Types::SaveOptions.new(include_text: true)
             ),
             document_symbol_provider: true,
@@ -454,11 +455,11 @@ module CRA
           true
         end
       end
-
     end
 
     class RPCRequest
       getter payload : Types::Message
+
       def self.from_io(io)
         request : Types::Message? = nil
         HTTP.parse_headers_and_body(io) do |headers, body|
@@ -470,7 +471,6 @@ module CRA
 
       def initialize(@payload : Types::Message)
       end
-
     end
 
     class Server
@@ -502,8 +502,6 @@ module CRA
         @sockets << server
         puts "Server bound to #{server}"
       end
-
-
 
       def listen
         ::Log.setup(backend: ::Log::IOBackend.new(io: STDERR))

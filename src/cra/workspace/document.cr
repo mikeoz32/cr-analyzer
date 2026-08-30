@@ -3,7 +3,8 @@ require "uri"
 require "compiler/crystal/syntax"
 require "./visitor_helpers"
 require "./node_finder"
-require "facet/compiler"
+require "./facet_node_finder"
+require "./facet_document_store"
 
 module CRA
   class WorkspaceDocument
@@ -12,9 +13,10 @@ module CRA
     getter program : Crystal::ASTNode?
     getter text : String
     getter diagnostics : Array(Types::Diagnostic)
+    getter facet_syntax : Facet::Compiler::SyntaxTree?
     @last_parse_error : Crystal::SyntaxException?
 
-    def initialize(@uri : URI)
+    def initialize(@uri : URI, @facet_store : FacetDocumentStore)
       @path = @uri.path
       @text = File.exists?(@path) ? File.read(@path) : ""
       @diagnostics = [] of Types::Diagnostic
@@ -22,11 +24,13 @@ module CRA
     end
 
     def update(text : String)
+      return if text == @text
       @text = text
       parse(@text)
     end
 
     def apply_changes(changes : Array(Types::TextDocumentContentChangeEvent))
+      previous_text = @text
       changes.each do |change|
         if range = change.range
           apply_range_change(range, change.text)
@@ -34,6 +38,7 @@ module CRA
           @text = change.text
         end
       end
+      return if @text == previous_text
       parse(@text)
     end
 
@@ -55,9 +60,21 @@ module CRA
       node_context(position).node
     end
 
+    def facet_node_context(position : Types::Position) : FacetNodeFinder?
+      @facet_syntax.try { |tree| FacetNodeFinder.new(tree, position) }
+    end
+
     private def parse(text : String)
       @program = nil
+      @facet_syntax = nil
       @last_parse_error = nil
+      begin
+        snapshot = @facet_store.update(@uri.to_s, text, @path)
+        @facet_syntax = snapshot.syntax
+      rescue
+        # Crystal parsing and fallback diagnostics remain available if Facet
+        # itself encounters an unexpected internal error.
+      end
       begin
         parser = Crystal::Parser.new(text)
         parser.wants_doc = true
@@ -81,20 +98,11 @@ module CRA
     end
 
     private def offset_for(text : String, position : Types::Position) : Int32
-      target_line = position.line
-      target_column = position.character
-      index = 0
-      current_line = 0
-
-      text.each_line do |line|
-        if current_line == target_line
-          return index + target_column
-        end
-        index += line.bytesize
-        current_line += 1
-      end
-
-      index + target_column
+      line_index = Facet::Compiler::LineIndex.new(Facet::Compiler::Source.new(text, @path))
+      line_index.offset_at(
+        Facet::Compiler::TextPosition.new(position.line, position.character),
+        Facet::Compiler::PositionEncoding::Utf16
+      )
     end
 
     private def parse_diagnostics(text : String)
@@ -107,24 +115,20 @@ module CRA
       end
 
       begin
-        source = Facet::Compiler::Source.new(text, @path)
-        parser = Facet::Compiler::Parser.new(source)
-        parser.parse_file
-        parser.diagnostics.each do |diag|
-          start_idx = diag.span.start
-          finish_idx = diag.span.finish
-          start_line, start_col = offset_to_line_col(text, start_idx)
-          end_line, end_col = offset_to_line_col(text, finish_idx)
-          start_pos = Types::Position.new(line: start_line, character: start_col)
-          end_pos = Types::Position.new(line: end_line, character: end_col)
+        syntax = @facet_syntax || raise "Facet syntax query unavailable"
+        syntax.ast.diagnostics.each do |diag|
+          start_location = syntax.position_at(diag.span.start)
+          end_location = syntax.position_at(diag.span.finish)
+          start_pos = Types::Position.new(line: start_location.line, character: start_location.character)
+          end_pos = Types::Position.new(line: end_location.line, character: end_location.character)
           severity = diag.severity == Facet::Compiler::Diagnostic::Severity::Warning ? Types::DiagnosticSeverity::Warning : Types::DiagnosticSeverity::Error
-        @diagnostics << Types::Diagnostic.new(
-          range: Types::Range.new(start_pos, end_pos),
-          severity: severity,
-          message: diag.message,
-          source: "facet"
-        )
-      end
+          @diagnostics << Types::Diagnostic.new(
+            range: Types::Range.new(start_pos, end_pos),
+            severity: severity,
+            message: diag.message,
+            source: "facet"
+          )
+        end
       rescue
         @diagnostics.clear
         add_parser_error_diagnostic
@@ -353,23 +357,6 @@ module CRA
           source: "lint"
         )
       end
-    end
-
-    private def offset_to_line_col(text : String, idx : Int32) : {Int32, Int32}
-      line = 0
-      col = 0
-      i = 0
-      bytes = text.bytes
-      while i < idx && i < bytes.size
-        if bytes[i] == '\n'.ord
-          line += 1
-          col = 0
-        else
-          col += 1
-        end
-        i += 1
-      end
-      {line, col}
     end
   end
 end

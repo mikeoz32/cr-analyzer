@@ -48,7 +48,7 @@ async def lsp_client():
     print("[fixture] server process started")
 
     try:
-        await client.initialize_async(
+        initialize_result = await client.initialize_async(
             params=InitializeParams(
                 capabilities=ClientCapabilities(
                     text_document=TextDocumentClientCapabilities(
@@ -58,6 +58,7 @@ async def lsp_client():
                 root_uri=f"file://{PROJECT_ROOT}",
             )
         )
+        client.initialize_result = initialize_result
         print("[fixture] initialize completed")
     except RuntimeError:
         server = getattr(client, "_server", None)

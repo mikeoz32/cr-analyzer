@@ -6,8 +6,17 @@ from lsprotocol.types import (
     Position,
     CompletionParams,
     TextDocumentIdentifier,
+    TextDocumentSyncKind,
+    TextDocumentSyncOptions,
 )
 from pygls.lsp.client import LanguageClient
+
+
+@pytest.mark.asyncio
+async def test_advertises_incremental_text_sync(lsp_client: LanguageClient):
+    sync = lsp_client.initialize_result.capabilities.text_document_sync
+    assert isinstance(sync, TextDocumentSyncOptions)
+    assert sync.change == TextDocumentSyncKind.Incremental
 
 
 @pytest.mark.asyncio

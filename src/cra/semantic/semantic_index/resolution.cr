@@ -40,14 +40,14 @@ module CRA::Psi
         if class_method != true
           if includes = @class_includes[owner_name]?
             includes.each do |inc|
-              if resolved = resolve_type_node(inc, owner_name)
+              if resolved = resolve_type_reference(inc, owner_name)
                 results.concat(find_methods_with_ancestors(resolved, name, class_method, visited))
               end
             end
           end
         end
-        if super_node = @class_superclass[owner_name]?
-          if resolved = resolve_type_node(super_node, owner_name)
+        if super_name = @class_superclass[owner_name]?
+          if resolved = resolve_type_reference(super_name, owner_name)
             results.concat(find_methods_with_ancestors(resolved, name, class_method, visited))
           end
         else
@@ -60,7 +60,7 @@ module CRA::Psi
         if class_method != true
           if includes = @module_includes[owner_name]?
             includes.each do |inc|
-              if resolved = resolve_type_node(inc, owner_name)
+              if resolved = resolve_type_reference(inc, owner_name)
                 results.concat(find_methods_with_ancestors(resolved, name, class_method, visited))
               end
             end
@@ -78,7 +78,7 @@ module CRA::Psi
       scope_def : Crystal::Def? = nil,
       scope_class : Crystal::ClassDef? = nil,
       cursor : Crystal::Location? = nil,
-      current_file : String? = nil
+      current_file : String? = nil,
     ) : Array(PsiElement)
       results = [] of PsiElement
       type_env : TypeEnv? = nil
@@ -224,7 +224,7 @@ module CRA::Psi
       scope_def : Crystal::Def? = nil,
       scope_class : Crystal::ClassDef? = nil,
       cursor : Crystal::Location? = nil,
-      current_file : String? = nil
+      current_file : String? = nil,
     ) : Array(PsiElement)
       find_definitions(node, context, scope_def, scope_class, cursor, current_file)
     end
@@ -236,7 +236,7 @@ module CRA::Psi
       scope_def : Crystal::Def? = nil,
       scope_class : Crystal::ClassDef? = nil,
       cursor : Crystal::Location? = nil,
-      current_file : String? = nil
+      current_file : String? = nil,
     ) : Array(PsiElement)
       if node.is_a?(Crystal::Path)
         if member = resolve_enum_member(node, context)
@@ -261,7 +261,7 @@ module CRA::Psi
       scope_def : Crystal::Def? = nil,
       scope_class : Crystal::ClassDef? = nil,
       cursor : Crystal::Location? = nil,
-      current_file : String? = nil
+      current_file : String? = nil,
     ) : Array(PsiElement)
       case node
       when Crystal::Path, Crystal::Generic, Crystal::Metaclass
@@ -289,7 +289,7 @@ module CRA::Psi
       context : String?,
       scope_def : Crystal::Def?,
       scope_class : Crystal::ClassDef?,
-      cursor : Crystal::Location?
+      cursor : Crystal::Location?,
     ) : Array(TypeRef)
       refs = [] of TypeRef
       case node
@@ -342,7 +342,7 @@ module CRA::Psi
       type_ref : TypeRef,
       context : String?,
       current_file : String?,
-      depth : Int32 = 0
+      depth : Int32 = 0,
     ) : Array(PsiElement)
       return [] of PsiElement if depth > 6
 
@@ -416,9 +416,9 @@ module CRA::Psi
       while idx < queue.size
         current = queue[idx]
         idx += 1
-        @class_superclass.each do |child_name, super_node|
+        @class_superclass.each do |child_name, super_name|
           next if seen[child_name]?
-          resolved = resolve_type_node(super_node, child_name)
+          resolved = resolve_type_reference(super_name, child_name)
           next unless resolved && resolved.name == current
 
           if child = find_class(child_name)
@@ -465,12 +465,12 @@ module CRA::Psi
     end
 
     private def includes_type?(
-      includes : Array(Crystal::ASTNode),
+      includes : Array(String),
       owner_name : String,
-      target_name : String
+      target_name : String,
     ) : Bool
       includes.any? do |inc|
-        resolved = resolve_type_node(inc, owner_name)
+        resolved = resolve_type_reference(inc, owner_name)
         resolved && resolved.name == target_name
       end
     end
@@ -480,7 +480,7 @@ module CRA::Psi
       context : String? = nil,
       scope_def : Crystal::Def? = nil,
       scope_class : Crystal::ClassDef? = nil,
-      cursor : Crystal::Location? = nil
+      cursor : Crystal::Location? = nil,
     ) : Array(Method)
       if obj = call.obj
         if (obj.is_a?(Crystal::Path) || obj.is_a?(Crystal::Generic) || obj.is_a?(Crystal::Metaclass)) && call.name == "new"

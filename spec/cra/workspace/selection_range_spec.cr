@@ -26,11 +26,11 @@ end
 private def selection_range_request(uri : String, position : CRA::Types::Position) : CRA::Types::SelectionRangeRequest
   payload = {
     jsonrpc: "2.0",
-    id: 1,
-    method: "textDocument/selectionRange",
-    params: {
+    id:      1,
+    method:  "textDocument/selectionRange",
+    params:  {
       textDocument: {uri: uri},
-      positions: [{line: position.line, character: position.character}],
+      positions:    [{line: position.line, character: position.character}],
     },
   }.to_json
 
@@ -65,6 +65,28 @@ describe CRA::Workspace do
       selection.range.end_position.line.should eq(expected.end_position.line)
       selection.range.end_position.character.should eq(expected.end_position.character)
       selection.parent.should_not be_nil
+    end
+  end
+
+  it "keeps selection ranges available when Crystal cannot parse the buffer" do
+    code = "class Broken\n  def value(\nend\n"
+    with_tmpdir do |dir|
+      path = File.join(dir, "incomplete_selection.cr")
+      File.write(path, "class Broken\nend\n")
+      uri = "file://#{path}"
+      ws = workspace_for(dir)
+      document = ws.document(uri).not_nil!
+      document.update(code)
+
+      index = index_for(code, "value")
+      position = position_for(code, index + 2)
+      finder = document.facet_node_context(position).not_nil!
+      finder.enclosing_type_name.should eq("Broken")
+
+      ranges = ws.selection_ranges(selection_range_request(uri, position))
+      ranges.size.should eq(1)
+      ranges.first.range.should_not be_nil
+      ranges.first.parent.should_not be_nil
     end
   end
 end

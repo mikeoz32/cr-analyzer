@@ -7,9 +7,13 @@ This document describes the major runtime pieces and the request flow.
 - `CRA::JsonRPC::Server`: stdio transport, reads/writes LSP JSON-RPC.
 - `CRA::JsonRPC::Processor`: dispatches requests; owns a `Workspace`.
 - `CRA::Workspace`: manages documents, indexing, completions, definitions, references, diagnostics.
-- `CRA::WorkspaceDocument`: stores text, parsed AST, diagnostics, and NodeFinder context.
+- `CRA::FacetDocumentStore`: workspace-owned Facet sources and incremental queries.
+- `CRA::WorkspaceDocument`: stores text, cached Facet syntax, temporary Crystal AST, and diagnostics.
 - `CRA::Psi::SemanticIndex`: semantic database for types, methods, vars, aliases, enums; call graph.
-- `Facet::Compiler::Parser` 0.1.5: tolerant parser used for default syntax diagnostics.
+- `CRA::Psi::FacetSemanticIndexer`: Facet-native declaration producer running
+  against a separate shadow `SemanticIndex` during result-parity work.
+- Facet 0.1.5 `QueryDb` / `SyntaxTree`: revisioned syntax, diagnostics, cursor,
+  document-symbol, and editor-position queries.
 - Completion providers: `SemanticIndex`, `KeywordCompletionProvider`, `RequirePathCompletionProvider`.
 - `DocumentSymbolsIndex`: AST visitor for document/workspace symbols.
 
@@ -17,27 +21,38 @@ This document describes the major runtime pieces and the request flow.
 
 1. Initialize -> Workspace.scan -> parse and index project, lib, and stdlib files.
 2. didOpen/didChange/didSave -> update document text -> parse -> Workspace.reindex_file.
-3. completion -> NodeFinder -> CompletionContext -> providers -> merged items.
-4. definition/declaration/implementation/typeDefinition -> NodeFinder -> SemanticIndex.find_definitions.
-5. references -> NodeFinder -> Workspace/SemanticIndex references.
-6. call hierarchy -> SemanticIndex call graph.
-7. diagnostics -> Facet parser + local lints -> publish/pull; Crystal::Parser is the fallback.
+3. selection ranges -> FacetNodeFinder -> Facet syntax spans.
+4. completion -> legacy NodeFinder -> CompletionContext -> providers -> merged items.
+5. definition/declaration/implementation/typeDefinition -> legacy NodeFinder -> SemanticIndex.find_definitions.
+6. references -> legacy NodeFinder -> Workspace/SemanticIndex references.
+7. call hierarchy -> SemanticIndex call graph.
+8. diagnostics -> cached Facet parse + local lints -> publish/pull; Crystal::Parser is the fallback.
 
 ## Indexing and updates
 
-- Full text sync (TextDocumentSyncKind::Full).
-- Each change parses the full document with Crystal::Parser.
+- Incremental LSP text sync (`TextDocumentSyncKind::Incremental`) with UTF-16
+  ranges converted by Facet's `LineIndex`.
+- Each changed document state advances one Facet source revision. Parse and
+  syntax queries are cached; identical updates reuse the existing results.
+- Crystal::Parser still parses each changed document while semantic consumers
+  are being migrated.
 - Reindexing also reindexes dependent types based on include/extend and superclass relationships.
 - stdlib lookup uses CRYSTAL_PATH or CRYSTAL_HOME, with /usr/share/crystal/src as fallback.
 
 ## Parser boundary
 
-The server currently parses an edited document for two different purposes:
+The server currently maintains two syntax paths during cutover:
 
-- Crystal::Parser produces the `Crystal::ASTNode` tree consumed by NodeFinder,
-  DocumentSymbolsIndex, and SemanticIndex.
-- Facet 0.1.5 produces tolerant parser diagnostics and spans.
+- Facet owns source revisions, parsing, diagnostics, `SyntaxTree`,
+  `FacetNodeFinder`, selection ranges, document-symbol fallback, and a shadow
+  declaration semantic producer.
+- Crystal::Parser produces the temporary `Crystal::ASTNode` tree consumed by
+  completion, navigation, rename, and SemanticIndex.
 
-This split is intentional while Facet compatibility is still being measured. A
-deeper integration should introduce a Facet-backed adapter or parallel semantic
-index before removing the Crystal AST path.
+Facet's AST remains native and arena-backed; cr-analyzer consumes its stable
+named query API rather than a Crystal AST compatibility layer. The Crystal path
+will be removed feature by feature after differential result gates pass.
+
+Incrementality is currently file-grained: unchanged files and unchanged text
+reuse query results, while an edited file is lexed and parsed again. Subtree-level
+incremental parsing can be added later without changing the workspace/query API.

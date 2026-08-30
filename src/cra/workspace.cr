@@ -8,7 +8,9 @@ require "./workspace/visitor_helpers"
 require "./workspace/ast_node_extensions"
 require "./workspace/node_finder"
 require "./workspace/document"
+require "./workspace/facet_document_store"
 require "./workspace/document_symbols_index"
+require "./workspace/facet_document_symbols_index"
 require "./workspace/keyword_completion_provider"
 require "./workspace/require_path_completion_provider"
 require "./workspace/rename"
@@ -33,8 +35,11 @@ module CRA
     def initialize(@root : URI)
       raise "Only file:// URIs are supported" unless @root.scheme == "file"
       @path = Path.new(@root.path)
+      @facet_store = FacetDocumentStore.new
       @indexer = DocumentSymbolsIndex.new
+      @facet_indexer = FacetDocumentSymbolsIndex.new
       @analyzer = Psi::SemanticIndex.new
+      @facet_analyzer = Psi::SemanticIndex.new
       @completion_providers << @analyzer
       @completion_providers << KeywordCompletionProvider.new
       @completion_providers << RequirePathCompletionProvider.new
@@ -48,8 +53,20 @@ module CRA
       @analyzer
     end
 
+    def facet_analyzer : Psi::SemanticIndex
+      @facet_analyzer
+    end
+
+    def facet_store : FacetDocumentStore
+      @facet_store
+    end
+
+    def facet_indexer : FacetDocumentSymbolsIndex
+      @facet_indexer
+    end
+
     def document(uri : String) : WorkspaceDocument?
-      @documents[uri] ||= WorkspaceDocument.new(URI.parse(uri))
+      @documents[uri] ||= WorkspaceDocument.new(URI.parse(uri), @facet_store)
     end
 
     def scan
@@ -100,28 +117,73 @@ module CRA
     end
 
     private def index_file(file_path : String)
-      parser = Crystal::Parser.new(File.read(file_path))
+      content = File.read(file_path)
+      uri = "file://#{file_path}"
+      @facet_store.register(uri, content, file_path)
+      index_facet_semantics(uri)
+      parser = Crystal::Parser.new(content)
       parser.wants_doc = true
       program = parser.parse
-      indexer.enter("file://#{file_path}")
-      @analyzer.enter("file://#{file_path}")
+      indexer.enter(uri)
+      @analyzer.enter(uri)
       program.accept(indexer)
       @analyzer.index(program)
     rescue ex : Exception
       Log.error { "Error parsing #{file_path}: #{ex.message}" }
     end
 
-    def reindex_file(uri : String, program : Crystal::ASTNode? = nil) : Array(String)
-      reindexed = [] of String
+    # Reindex the saved disk revision. This overload deliberately has no
+    # default AST argument: an explicit nil means an unsaved editor revision
+    # that Crystal rejected, not a request to fall back to disk.
+    def reindex_file(uri : String) : Array(String)
       path = URI.parse(uri).path
-      return reindexed unless File.exists?(path) || program
+      return [] of String unless File.exists?(path)
 
-      old_types = @analyzer.type_names_for_file(uri)
-      if program.nil?
-        parser = Crystal::Parser.new(File.read(path))
+      content = File.read(path)
+      @facet_store.register(uri, content, path)
+      program : Crystal::ASTNode? = nil
+      begin
+        parser = Crystal::Parser.new(content)
         parser.wants_doc = true
         program = parser.parse
+      rescue ex : Exception
+        Log.error { "Error parsing #{path}: #{ex.message}" }
       end
+      reindex_current_revision(uri, program)
+    rescue ex : Exception
+      Log.error { "Error reindexing #{uri}: #{ex.message}" }
+      [] of String
+    end
+
+    # Reindex the current editor revision. `program` may legitimately be nil
+    # while Facet still supplies a useful error-tolerant syntax tree.
+    def reindex_file(uri : String, program : Crystal::ASTNode?) : Array(String)
+      path = URI.parse(uri).path
+      return [] of String unless File.exists?(path) || @documents.has_key?(uri) || program
+
+      if document = @documents[uri]?
+        # didOpen/didChange may contain a newer, unsaved revision than disk.
+        @facet_store.register(uri, document.text, path)
+      elsif File.exists?(path)
+        @facet_store.register(uri, File.read(path), path)
+      end
+      reindex_current_revision(uri, program)
+    rescue ex : Exception
+      Log.error { "Error reindexing #{uri}: #{ex.message}" }
+      [] of String
+    end
+
+    private def reindex_current_revision(uri : String, program : Crystal::ASTNode?) : Array(String)
+      reindexed = [] of String
+
+      if syntax = @facet_store.syntax(uri)
+        @facet_indexer.index(uri, syntax)
+        index_facet_semantics(uri, syntax)
+      end
+      reindexed << uri
+      return reindexed unless program
+
+      old_types = @analyzer.type_names_for_file(uri)
 
       @analyzer.remove_file(uri)
       @analyzer.enter(uri)
@@ -129,7 +191,6 @@ module CRA
 
       @indexer.enter(uri)
       program.accept(@indexer)
-      reindexed << uri
 
       new_types = @analyzer.type_names_for_file(uri)
       changed_types = (old_types + new_types).uniq
@@ -142,7 +203,10 @@ module CRA
         next unless File.exists?(dep_path)
 
         begin
-          dep_parser = Crystal::Parser.new(File.read(dep_path))
+          dep_content = File.read(dep_path)
+          @facet_store.register(dep_uri, dep_content, dep_path)
+          index_facet_semantics(dep_uri)
+          dep_parser = Crystal::Parser.new(dep_content)
           dep_parser.wants_doc = true
           dep_program = dep_parser.parse
         rescue ex : Exception
@@ -160,9 +224,16 @@ module CRA
       end
 
       reindexed
+    end
+
+    private def index_facet_semantics(uri : String, syntax : Facet::Compiler::SyntaxTree? = nil) : Nil
+      syntax ||= @facet_store.syntax(uri)
+      return unless syntax
+      @facet_analyzer.remove_file(uri)
+      @facet_analyzer.enter(uri)
+      Psi::FacetSemanticIndexer.new(@facet_analyzer).index(syntax)
     rescue ex : Exception
-      Log.error { "Error reindexing #{uri}: #{ex.message}" }
-      [] of String
+      Log.error { "Error indexing Facet syntax for #{uri}: #{ex.message}" }
     end
 
     def complete(request : Types::CompletionRequest) : Array(Types::CompletionItem)
@@ -397,8 +468,12 @@ module CRA
       return [] of Types::SelectionRange unless document
 
       request.positions.map do |position|
-        finder = document.node_context(position)
-        selection_range_for_path(finder.context_path, position)
+        if finder = document.facet_node_context(position)
+          facet_selection_range_for_path(finder.context_path, finder.tree, position)
+        else
+          finder = document.node_context(position)
+          selection_range_for_path(finder.context_path, position)
+        end
       end
     end
 
@@ -574,6 +649,17 @@ module CRA
       results
     end
 
+    def document_symbols(uri : String) : Array(Types::SymbolInformation)
+      document = document(uri)
+      if syntax = document.try(&.facet_syntax)
+        @facet_indexer.index(uri, syntax)
+      end
+      crystal_symbols = @indexer.symbol_informations(uri)
+      facet_symbols = @facet_indexer.symbol_informations(uri)
+      return facet_symbols if document && document.program.nil?
+      crystal_symbols.empty? ? facet_symbols : crystal_symbols
+    end
+
     def publish_diagnostics(uri : String) : Types::PublishDiagnosticsParams
       document = document(uri)
       diags = document ? document.diagnostics : [] of Types::Diagnostic
@@ -612,7 +698,7 @@ module CRA
 
       value = sections.join("\n\n---\n\n")
       JSON::Any.new({
-        "kind" => JSON::Any.new("markdown"),
+        "kind"  => JSON::Any.new("markdown"),
         "value" => JSON::Any.new(value),
       })
     end
@@ -630,7 +716,7 @@ module CRA
       end
 
       JSON::Any.new({
-        "kind" => JSON::Any.new("markdown"),
+        "kind"  => JSON::Any.new("markdown"),
         "value" => JSON::Any.new(sections.join("\n\n")),
       })
     end
@@ -688,7 +774,7 @@ module CRA
       return nil unless doc && !doc.empty?
 
       JSON::Any.new({
-        "kind" => JSON::Any.new("markdown"),
+        "kind"  => JSON::Any.new("markdown"),
         "value" => JSON::Any.new(doc),
       })
     end
@@ -711,7 +797,7 @@ module CRA
     private def active_parameter_index(
       call : Crystal::Call,
       cursor : Crystal::Location,
-      parameters : Array(String)
+      parameters : Array(String),
     ) : Int32?
       named_args = call.named_args || [] of Crystal::NamedArgument
       named_args.each_with_index do |named, idx|
@@ -741,7 +827,7 @@ module CRA
     private def count_args_before_cursor(
       call : Crystal::Call,
       named_args : Array(Crystal::NamedArgument),
-      cursor : Crystal::Location
+      cursor : Crystal::Location,
     ) : Int32
       index = 0
       call.args.each do |arg|
@@ -883,7 +969,7 @@ module CRA
 
     private def references_for_methods_in_workspace(
       target_keys : Hash(String, Bool),
-      include_decl : Bool
+      include_decl : Bool,
     ) : Array(Types::Location)
       locations = [] of Types::Location
       seen = {} of String => Bool
@@ -988,6 +1074,44 @@ module CRA
         parent = Types::SelectionRange.new(range, parent)
       end
       parent.not_nil!
+    end
+
+    private def facet_selection_range_for_path(
+      path : Array(Facet::Compiler::SyntaxNode),
+      tree : Facet::Compiler::SyntaxTree,
+      position : Types::Position,
+    ) : Types::SelectionRange
+      ranges = [] of Types::Range
+      path.each do |node|
+        next if {Facet::Compiler::NodeKind::Nop, Facet::Compiler::NodeKind::Error}.includes?(node.kind)
+        range = facet_range(node.span, tree)
+        ranges << range unless ranges.last?.try { |previous| ranges_equal?(previous, range) }
+      end
+
+      if leaf = path.last?
+        if name_span = leaf.name_span
+          name_range = facet_range(name_span, tree)
+          ranges << name_range unless ranges.last?.try { |previous| ranges_equal?(previous, name_range) }
+        end
+      end
+
+      if ranges.empty?
+        fallback = Types::Range.new(start_position: position, end_position: position)
+        return Types::SelectionRange.new(fallback)
+      end
+
+      parent : Types::SelectionRange? = nil
+      ranges.each { |range| parent = Types::SelectionRange.new(range, parent) }
+      parent.not_nil!
+    end
+
+    private def facet_range(span : Facet::Compiler::Span, tree : Facet::Compiler::SyntaxTree) : Types::Range
+      start_position = tree.position_at(span.start)
+      end_position = tree.position_at(span.finish)
+      Types::Range.new(
+        Types::Position.new(start_position.line, start_position.character),
+        Types::Position.new(end_position.line, end_position.character)
+      )
     end
 
     private def node_range(node : Crystal::ASTNode) : Types::Range?
@@ -1245,5 +1369,4 @@ module CRA
       false
     end
   end
-
 end

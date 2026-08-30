@@ -34,7 +34,7 @@ module CRA::Psi
       owner : CRA::Psi::Module?,
       location : Location?,
       type_vars : Array(String) = [] of String,
-      doc : String? = nil
+      doc : String? = nil,
     ) : CRA::Psi::Module
       name = canonical_name(name)
       if found = find_module(name)
@@ -61,7 +61,7 @@ module CRA::Psi
       owner : CRA::Psi::PsiElement | Nil,
       location : Location?,
       type_vars : Array(String) = [] of String,
-      doc : String? = nil
+      doc : String? = nil,
     ) : CRA::Psi::Class
       name = canonical_name(name)
       if found = find_class(name)
@@ -85,7 +85,7 @@ module CRA::Psi
       name : String,
       owner : CRA::Psi::PsiElement | Nil,
       location : Location?,
-      doc : String? = nil
+      doc : String? = nil,
     ) : CRA::Psi::Enum
       name = canonical_name(name)
       if found = find_enum(name)
@@ -146,40 +146,48 @@ module CRA::Psi
     end
 
     def record_include(owner : PsiElement, include_node : Crystal::ASTNode)
+      return unless include_name = dependency_name_for(include_node, owner.name)
+      record_include(owner, include_name)
+    end
+
+    def record_include(owner : PsiElement, include_name : String)
+      include_name = dependency_name_for(include_name, owner.name)
       file = @current_file
       case owner
       when CRA::Psi::Class
-        add_include(@class_includes, owner.name, include_node)
+        add_include(@class_includes, owner.name, include_name)
         if file
-          (@includes_by_file[file] ||= [] of IncludeEntry) << IncludeEntry.new(owner.name, include_node, :class)
+          (@includes_by_file[file] ||= [] of IncludeEntry) << IncludeEntry.new(owner.name, include_name, :class)
         end
       when CRA::Psi::Module
-        add_include(@module_includes, owner.name, include_node)
+        add_include(@module_includes, owner.name, include_name)
         if file
-          (@includes_by_file[file] ||= [] of IncludeEntry) << IncludeEntry.new(owner.name, include_node, :module)
+          (@includes_by_file[file] ||= [] of IncludeEntry) << IncludeEntry.new(owner.name, include_name, :module)
         end
       end
 
-      if dependency = dependency_name_for(include_node, owner.name)
-        record_dependency(owner.name, dependency)
-      end
+      record_dependency(owner.name, include_name)
     end
 
     def set_superclass(name : String, superclass : Crystal::ASTNode)
+      return unless superclass_name = dependency_name_for(superclass, parent_namespace(name))
+      set_superclass(name, superclass_name)
+    end
+
+    def set_superclass(name : String, superclass_name : String)
+      superclass_name = dependency_name_for(superclass_name, parent_namespace(name))
       file = @current_file
       if file
-        defs = (@superclass_defs[name] ||= {} of String => Crystal::ASTNode)
-        defs[file] = superclass
-        @class_superclass[name] = superclass
+        defs = (@superclass_defs[name] ||= {} of String => String)
+        defs[file] = superclass_name
+        @class_superclass[name] = superclass_name
         owners = (@superclass_by_file[file] ||= [] of String)
         owners << name unless owners.includes?(name)
       else
-        @class_superclass[name] ||= superclass
+        @class_superclass[name] ||= superclass_name
       end
 
-      if dependency = dependency_name_for(superclass, parent_namespace(name))
-        record_dependency(name, dependency)
-      end
+      record_dependency(name, superclass_name)
     end
 
     def location_for(node : Crystal::ASTNode) : Location
@@ -207,7 +215,14 @@ module CRA::Psi
         includes.each do |entry|
           store = entry.kind == :class ? @class_includes : @module_includes
           if nodes = store[entry.owner_name]?
-            nodes.delete(entry.node)
+            still_defined = @includes_by_file.values.any? do |entries|
+              entries.any? do |candidate|
+                candidate.kind == entry.kind &&
+                  candidate.owner_name == entry.owner_name &&
+                  candidate.name == entry.name
+              end
+            end
+            nodes.delete(entry.name) unless still_defined
             store.delete(entry.owner_name) if nodes.empty?
           end
         end
@@ -309,7 +324,7 @@ module CRA::Psi
       kind : Symbol,
       location : Location?,
       element : PsiElement,
-      type_vars : Array(String) = [] of String
+      type_vars : Array(String) = [] of String,
     )
       name = canonical_name(name)
       file = @current_file
@@ -429,6 +444,21 @@ module CRA::Psi
       else
         nil
       end
+    end
+
+    private def dependency_name_for(name : String, context : String?) : String
+      global = name.starts_with?("::")
+      normalized = global ? name.byte_slice(2, name.bytesize - 2) : name
+      if resolved = resolve_type_reference(name, context)
+        return resolved.name
+      end
+      return normalized if global || normalized.includes?("::")
+      if context && !context.empty?
+        if scope = parent_namespace(context)
+          return "#{scope}::#{normalized}"
+        end
+      end
+      normalized
     end
 
     private def parent_namespace(name : String) : String?
@@ -668,8 +698,8 @@ module CRA::Psi
       results = [] of PsiElement
       case element
       when CRA::Psi::Class
-        if super_node = @class_superclass[element.name]?
-          if resolved = resolve_type_node(super_node, element.name)
+        if super_name = @class_superclass[element.name]?
+          if resolved = resolve_type_reference(super_name, element.name)
             if super_elem = find_type(resolved.name)
               results << super_elem
             else
@@ -684,7 +714,7 @@ module CRA::Psi
 
         if includes = @class_includes[element.name]?
           includes.each do |inc|
-            if resolved = resolve_type_node(inc, element.name)
+            if resolved = resolve_type_reference(inc, element.name)
               if inc_elem = find_type(resolved.name)
                 results << inc_elem
               end
@@ -694,7 +724,7 @@ module CRA::Psi
       when CRA::Psi::Module
         if includes = @module_includes[element.name]?
           includes.each do |inc|
-            if resolved = resolve_type_node(inc, element.name)
+            if resolved = resolve_type_reference(inc, element.name)
               if inc_elem = find_type(resolved.name)
                 results << inc_elem
               end

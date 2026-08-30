@@ -1,68 +1,85 @@
-# Facet Integration Plan
+# Facet Integration Status
 
 ## Decision
 
-Facet is ready for a deeper, incremental integration, but not for replacing the
-Crystal AST semantic pipeline yet. The next step should make Facet a persistent
-syntax service for open documents and compare its output with the existing path.
+cr-analyzer is moving to Facet as its only syntax frontend. The migration is
+incremental so editor features stay available while semantic consumers are
+ported from `Crystal::ASTNode` to Facet's native arena-backed AST.
 
-The production path should continue to use Crystal::Parser for semantic indexing
-until declaration, span, and compatibility parity are measured on real projects.
+Facet's AST is not expected to match Crystal's AST. Consumers use
+`SyntaxTree` / `SyntaxNode`, a stable named-query facade over Facet's own node
+roles, spans, and symbols.
 
 ## Current boundary
 
 | Concern | Current implementation |
 | --- | --- |
-| Syntax diagnostics | Facet 0.1.5 |
-| Error-tolerant AST | Produced by Facet, then discarded |
-| Cursor node lookup | Crystal::ASTNode / Crystal::Visitor |
-| Document/workspace symbols | Crystal::ASTNode / Crystal::Visitor |
-| Semantic index and inference | Crystal::ASTNode / Crystal::Visitor |
-| Macro support | Separate cr-analyzer interpreter; Facet expansion is not consumed |
-| Incremental source queries | Facet QueryDb exists but is not connected to Workspace |
+| Source versions and query invalidation | Workspace-owned Facet `SourceManager` + `QueryDb` |
+| Syntax diagnostics | Cached Facet parse; Crystal diagnostic fallback remains available |
+| UTF-8 byte / LSP UTF-16 conversion | Facet `LineIndex` |
+| Cursor lookup and selection ranges | Facet `SyntaxTree#node_at` / `FacetNodeFinder` |
+| Document symbols | Facet shadow collector; Facet fallback for incomplete buffers |
+| Declaration semantic index | Facet shadow index for types, methods, aliases, includes, inheritance, enum members, docs, and locations |
+| Workspace symbols | Crystal document-symbol index while public-result parity is measured |
+| Completion, navigation, references, rename | Crystal AST consumers being migrated |
+| Locals, calls, inference, and call graph | Crystal AST consumers being migrated |
+| Macro support | Separate cr-analyzer interpreter; Facet expansion is not consumed yet |
 
-## Why not switch the semantic index now
+Each URI has a stable Facet `FileId`. A document version is parsed once and its
+`AstFile`, `SyntaxTree`, diagnostics, parent map, and line index are reused by
+all syntax consumers. Unchanged source bytes retain the cached query result.
+Macro expansion invalidation is footprint-based, so edits to unrelated files
+do not force re-expansion.
 
-- NodeFinder, document symbols, rename collectors, and both semantic indexing
-  passes are implemented as Crystal::Visitor subclasses.
-- Facet exposes a compact generic arena. Stable typed accessors or a visitor
-  facade are needed before cr-analyzer should depend on child positions.
-- Facet's ProgramIndex currently indexes macros, not types, methods, includes,
-  calls, locals, or inheritance relationships.
-- Lexer stdlib coverage and parser compatibility specs are strong foundations,
-  but whole-project parser and declaration parity are not measured yet.
-- The two projects have separate macro expansion models that need explicit
-  ownership rather than silently running both for semantic output.
+The server advertises incremental LSP text synchronization and applies UTF-16
+range edits before advancing the Facet source revision. Frontend invalidation is
+currently file-grained: an edited file is reparsed, but unchanged files and
+unrelated macro expansions stay cached.
 
-## Recommended next slice
+## Completed gates
 
-1. Add stable Facet traversal/accessor APIs for declarations, names, bodies,
-   parameters, type expressions, calls, and source spans.
-2. Add a workspace-owned Facet document store mapping URI to `SourceManager`
-   file IDs and backed by `QueryDb`.
-3. Parse each open document once per text version and retain its `AstFile`.
-   Produce diagnostics from that cached result instead of reparsing locally.
-4. Build a Facet declaration collector in shadow mode. Compare classes, modules,
-   enums, aliases, methods, and spans with `DocumentSymbolsIndex` in specs.
-5. Use Facet document symbols as a fallback when Crystal::Parser rejects an
-   incomplete edit. Keep the Crystal result authoritative for valid files first.
-6. After corpus parity, extend the shadow index to includes, inheritance, calls,
-   and variables before considering completion/navigation cutover.
+- Exact Crystal 1.21 parser decision parity on all 4,378 captured upstream
+  cases, including exact diagnostics for 941 rejected inputs.
+- Exact common semantic AST projection on all 3,437 accepted upstream inputs.
+- Clean parse and native AST integrity across all 1,625 Crystal stdlib files.
+- Clean parse and native AST integrity across all 118 Facet and cr-analyzer
+  source/spec files measured before this integration slice.
+- Stable declaration roles, parent/ancestor traversal, cursor lookup, name
+  spans, doc comments, and UTF-16 conversion in Facet syntax queries.
+- Automatic revision-based parse/syntax/index/expand cache invalidation.
+- Tests proving stable file IDs, cache reuse, unrelated-edit expansion reuse,
+  macro-provider invalidation, and UTF-16 incremental edits.
+- Facet/Crystal document-symbol contract parity for representative nested
+  declarations, methods, enum members, and fields.
+- A Facet-native two-pass declaration semantic producer plus representative
+  parity for types, methods, aliases, includes, inheritance, enum members, docs,
+  locations, nested names, and reopen-file invalidation.
+- The reusable `scripts/check_facet_semantic_parity.cr` corpus gate; the current
+  cr-analyzer source/spec corpus is exact on 60/60 Crystal-accepted files, with
+  one additional Facet recovery from a Crystal-rejected file.
+- Tested document-symbol and selection-range behavior on incomplete buffers
+  rejected by Crystal::Parser.
 
-## Required gates
+## Remaining cutover work
 
-- Parse the installed Crystal stdlib and representative shard/workspace corpora,
-  recording every Facet-only diagnostic on code accepted by Crystal::Parser.
-- Differential specs for declaration kinds, names, nesting, and source spans.
-- Correct UTF-8 byte offset to LSP UTF-16 position conversion.
-- didOpen/didChange/didSave invalidation specs, including dependent macro files.
-- Startup, edit latency, and memory benchmarks for single-parse and dual-parse modes.
-- A tested fallback switch so a Facet failure cannot disable semantic features.
+1. Port completion context and keyword-context queries to `FacetNodeFinder`.
+2. Port local/call collectors used by inference, navigation, references, and
+   rename.
+3. Compare shadow semantic and public LSP results on stdlib and representative
+   workspaces, not only focused declaration contracts.
+4. Make Facet authoritative feature by feature, retaining an explicit rollback
+   switch until each differential gate is clean.
+5. Feed Facet's fully expanded AST into semantic indexing, then remove the
+   cr-analyzer macro interpreter and all `compiler/crystal/syntax` requires.
 
-## Suggested ownership
+Run the local declaration gate after semantic changes:
 
-Facet should own lexing, parsing, syntax diagnostics, source versions, and macro
-expansion provenance. cr-analyzer should own LSP transport, workspace policy, and
-the editor semantic model. Keeping that boundary explicit allows Facet to grow
-toward a compiler without coupling its internal arena directly to LSP protocol
-types.
+```console
+crystal run scripts/check_facet_semantic_parity.cr
+```
+
+## Ownership
+
+Facet owns source text, revisions, lexing, parsing, syntax diagnostics, native
+AST queries, macro expansion, and expansion provenance. cr-analyzer owns LSP
+transport, workspace policy, the editor semantic model, and protocol results.

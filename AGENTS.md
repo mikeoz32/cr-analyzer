@@ -5,9 +5,11 @@ This file is for contributors and automation agents working on this repo.
 ## Project summary
 
 cr-analyzer is a lightweight LSP server for Crystal. It builds an editor-oriented
-semantic index without invoking the full compiler. Crystal::Parser currently
-provides the AST used by navigation and semantic features; Facet 0.1.5 provides
-the default parser diagnostics.
+semantic index without invoking the full compiler. Facet 0.1.5 now provides a
+workspace-owned incremental syntax database, diagnostics, cursor lookup,
+selection ranges, document-symbol shadow/fallback results, and a declaration-level
+semantic shadow index. Crystal::Parser still provides the AST used by the
+remaining navigation and semantic features.
 
 ## Setup
 
@@ -17,6 +19,7 @@ the default parser diagnostics.
 - Build: shards build (binary at bin/cr-analyzer)
 - Tests: crystal spec
 - End-to-end LSP test: uv run pytest
+- Facet semantic parity: crystal run scripts/check_facet_semantic_parity.cr
 - Manual client: uv run main.py (uses the Python env in pyproject.toml)
 
 ## Repo layout
@@ -34,7 +37,8 @@ the default parser diagnostics.
 ## Data flow
 
 - Initialize -> Workspace.scan -> parse and index workspace, dependencies, and stdlib.
-- didOpen/didChange/didSave -> WorkspaceDocument update -> parse -> reindex the file and dependent types.
+- didOpen/didChange/didSave -> incremental LSP text edits -> revisioned Facet
+  query plus temporary Crystal parse -> reindex the file and dependent types.
 - completion -> NodeFinder -> CompletionContext -> providers.
 - navigation/references/hierarchies -> NodeFinder -> SemanticIndex.
 - diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
@@ -47,12 +51,19 @@ the default parser diagnostics.
 
 ## Parser boundary
 
-- `WorkspaceDocument#program`, NodeFinder, and the semantic index use `Crystal::ASTNode`.
-- Facet 0.1.5 is parsed separately for diagnostics and error recovery.
+- `WorkspaceDocument#program` and the remaining semantic consumers use `Crystal::ASTNode`.
+- Facet uses stable per-URI file IDs in a workspace-owned `QueryDb`; do not
+  reparse Facet locally or discard its `SyntaxTree`.
+- Facet owns diagnostic spans, UTF-16 conversion, selection ranges, and the
+  document-symbol fallback for incomplete buffers.
+- Facet's declaration-level semantic producer runs in shadow mode for types,
+  methods, aliases, includes, inheritance, enum members, docs, and locations.
 - `CRA_DISABLE_FACET_DIAGNOSTICS=1` switches diagnostics back to Crystal::Parser.
-- Do not assume that a successful Facet parse is already used for semantic features.
-- A deeper Facet integration should start behind an adapter or parallel index and
-  retain Crystal::Parser as a correctness fallback until compatibility is measured.
+- Facet's native AST is intentionally different from Crystal's AST. Extend its
+  `SyntaxTree` / `SyntaxNode` query facade instead of emulating Crystal nodes or
+  depending on raw child positions in cr-analyzer.
+- Port remaining features through shadow result parity before removing their
+  Crystal::Parser fallback.
 
 ## Environment
 

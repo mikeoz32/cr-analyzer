@@ -1,6 +1,8 @@
 # cr-analyzer
 
-Lightweight LSP server for the Crystal language. cr-analyzer parses source files with the Crystal parser and builds a semantic index without invoking the full compiler, aiming for fast, editor-friendly feedback.
+Lightweight LSP server for the Crystal language. cr-analyzer uses Facet's
+incremental syntax frontend and builds a semantic index without invoking the
+full compiler, aiming for fast, editor-friendly feedback.
 
 ## What works today
 

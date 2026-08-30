@@ -6,7 +6,7 @@ module CRA::Psi
       scope_def : Crystal::Def?,
       scope_class : Crystal::ClassDef?,
       cursor : Crystal::Location?,
-      depth : Int32 = 0
+      depth : Int32 = 0,
     ) : TypeRef?
       return nil if depth > 4
 
@@ -40,7 +40,7 @@ module CRA::Psi
       scope_def : Crystal::Def?,
       scope_class : Crystal::ClassDef?,
       cursor : Crystal::Location?,
-      depth : Int32
+      depth : Int32,
     ) : TypeRef?
       if call.name == "new"
         if obj = call.obj
@@ -105,7 +105,7 @@ module CRA::Psi
     private def substitute_type_ref(
       type_ref : TypeRef,
       substitutions : Hash(String, TypeRef),
-      receiver_type : TypeRef
+      receiver_type : TypeRef,
     ) : TypeRef
       if type_ref.union?
         types = type_ref.union_types.map { |member| substitute_type_ref(member, substitutions, receiver_type) }
@@ -178,6 +178,13 @@ module CRA::Psi
       else
         nil
       end
+    end
+
+    private def resolve_type_reference(name : String, context : String?) : CRA::Psi::Module | CRA::Psi::Class | CRA::Psi::Enum | Nil
+      global = name.starts_with?("::")
+      normalized = global ? name.byte_slice(2, name.bytesize - 2) : name
+      resolved = global ? find_type(normalized) : resolve_in_context(normalized, context)
+      resolved || resolve_alias_target(normalized, context)
     end
 
     private def resolve_enum_member(path : Crystal::Path, context : String?) : CRA::Psi::EnumMember?

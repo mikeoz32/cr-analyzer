@@ -1,6 +1,6 @@
 # cr-analyzer
 
-cr-analyzer is a lightweight Language Server Protocol (LSP) server for the Crystal language. It parses source files with the Crystal parser and builds a semantic index without invoking the full compiler, aiming for fast, editor-friendly feedback.
+cr-analyzer is a lightweight Language Server Protocol (LSP) server for the Crystal language. It uses Facet's incremental syntax frontend and builds an editor-oriented semantic index without invoking the full compiler.
 
 ## Status
 
@@ -22,7 +22,7 @@ Active development. Implemented LSP features include completion (with resolve), 
 - Hover with signature + documentation.
 - Signature help with active parameter selection.
 - Document highlight for locals/ivars/cvars and type paths.
-- Selection ranges based on AST nesting.
+- Selection ranges based on Facet syntax nesting.
 - Inline values (variables in range).
 - Call hierarchy (incoming/outgoing).
 - Type hierarchy (prepare/super/sub types).
@@ -44,7 +44,11 @@ Active development. Implemented LSP features include completion (with resolve), 
 - No full compiler type checking or macro expansion. Type inference is best-effort based on annotations and simple assignments.
 - Macro expansion is limited to built-in macros (getter, setter, property, record) and a small interpreter for user-defined macros.
 - Rename is best-effort and currently scoped to workspace files (stdlib is not edited).
-- Facet currently supplies diagnostics only. Semantic indexing and editor navigation still consume `Crystal::ASTNode` from Crystal::Parser.
+- Facet owns the incremental document store, cached syntax/diagnostics, UTF-16
+  mapping, cursor lookup, selection ranges, and document-symbol fallback for
+  incomplete buffers. A Facet-native declaration semantic index runs in shadow
+  mode. Completion, navigation, rename, locals, calls, and inference are still
+  being ported from `Crystal::ASTNode`.
 
 ## Usage
 

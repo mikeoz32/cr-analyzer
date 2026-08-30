@@ -5,7 +5,7 @@ module CRA::Psi
 
       trigger = context.trigger_character
 
-       # Named argument completion inside a call.
+      # Named argument completion inside a call.
       if call = call_for_context(context)
         if items = complete_named_arguments(context, call)
           return items unless items.empty?
@@ -88,9 +88,9 @@ module CRA::Psi
       items
     end
 
-    private def add_include(store : Hash(String, Array(Crystal::ASTNode)), owner_name : String, include_node : Crystal::ASTNode)
-      store[owner_name] ||= [] of Crystal::ASTNode
-      store[owner_name] << include_node
+    private def add_include(store : Hash(String, Array(String)), owner_name : String, include_name : String)
+      store[owner_name] ||= [] of String
+      store[owner_name] << include_name unless store[owner_name].includes?(include_name)
     end
 
     # Builds a local type env from class-level declarations, initialize, and the current def.
@@ -120,7 +120,7 @@ module CRA::Psi
     private def complete_members(
       context : CRA::CompletionContext,
       prefix : String,
-      receiver_node : Crystal::ASTNode? = nil
+      receiver_node : Crystal::ASTNode? = nil,
     ) : Array(CRA::Types::CompletionItem)
       receiver = receiver_node || receiver_node_for_completion(context.node) || receiver_node_for_completion(context.previous_node)
       return [] of CRA::Types::CompletionItem unless receiver
@@ -155,7 +155,7 @@ module CRA::Psi
     private def complete_namespace(
       context : CRA::CompletionContext,
       prefix : String,
-      namespace_hint : String? = nil
+      namespace_hint : String? = nil,
     ) : Array(CRA::Types::CompletionItem)
       namespace = namespace_hint
       unless namespace
@@ -230,7 +230,7 @@ module CRA::Psi
     private def complete_class_vars(
       scope_class : Crystal::ClassDef,
       prefix : String,
-      context : CRA::CompletionContext
+      context : CRA::CompletionContext,
     ) : Array(CRA::Types::CompletionItem)
       collector = ClassVarNameCollector.new
       scope_class.body.accept(collector)
@@ -350,7 +350,7 @@ module CRA::Psi
 
     private def receiver_node_for_completion(
       node : Crystal::ASTNode?,
-      prefer_call : Bool = false
+      prefer_call : Bool = false,
     ) : Crystal::ASTNode?
       case node
       when Crystal::Call
@@ -365,7 +365,7 @@ module CRA::Psi
 
     private def receiver_for_dot(
       context : CRA::CompletionContext,
-      prefix : String
+      prefix : String,
     ) : Crystal::ASTNode?
       call = context.node.as?(Crystal::Call) || context.previous_node.as?(Crystal::Call)
       if call
@@ -395,7 +395,7 @@ module CRA::Psi
       context : String?,
       scope_def : Crystal::Def?,
       scope_class : Crystal::ClassDef?,
-      cursor : Crystal::Location?
+      cursor : Crystal::Location?,
     ) : {CRA::Psi::PsiElement, Bool}?
       return nil unless receiver || context
 
@@ -460,7 +460,7 @@ module CRA::Psi
 
     private def methods_with_ancestors(
       owner : CRA::Psi::PsiElement,
-      class_method : Bool?
+      class_method : Bool?,
     ) : Array(Method)
       results = [] of CRA::Psi::Method
       visited = {} of String => Bool
@@ -472,7 +472,7 @@ module CRA::Psi
       owner : CRA::Psi::PsiElement,
       class_method : Bool?,
       visited : Hash(String, Bool),
-      results : Array(Method)
+      results : Array(Method),
     )
       return unless owner.is_a?(CRA::Psi::Module) || owner.is_a?(CRA::Psi::Class) || owner.is_a?(CRA::Psi::Enum)
 
@@ -493,14 +493,14 @@ module CRA::Psi
         if class_method != true
           if includes = @class_includes[owner_name]?
             includes.each do |inc|
-              if resolved = resolve_type_node(inc, owner_name)
+              if resolved = resolve_type_reference(inc, owner_name)
                 collect_methods_with_ancestors(resolved, class_method, visited, results)
               end
             end
           end
         end
-        if super_node = @class_superclass[owner_name]?
-          if resolved = resolve_type_node(super_node, owner_name)
+        if super_name = @class_superclass[owner_name]?
+          if resolved = resolve_type_reference(super_name, owner_name)
             collect_methods_with_ancestors(resolved, class_method, visited, results)
           end
         end
@@ -508,7 +508,7 @@ module CRA::Psi
         if class_method != true
           if includes = @module_includes[owner_name]?
             includes.each do |inc|
-              if resolved = resolve_type_node(inc, owner_name)
+              if resolved = resolve_type_reference(inc, owner_name)
                 collect_methods_with_ancestors(resolved, class_method, visited, results)
               end
             end
@@ -616,7 +616,7 @@ module CRA::Psi
       scope_def : Crystal::Def?,
       scope_class : Crystal::ClassDef?,
       name : String,
-      cursor : Crystal::Location?
+      cursor : Crystal::Location?,
     ) : Crystal::ASTNode?
       if scope_def
         def_finder = InstanceVarDefinitionCollector.new(name, cursor, false)
@@ -671,6 +671,5 @@ module CRA::Psi
 
       nil
     end
-
   end
 end
