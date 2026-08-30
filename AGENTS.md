@@ -53,7 +53,8 @@ unsupported inference shapes, and remaining semantic consumers.
   semantic resolution; legacy Crystal edges are fallback only for legacy items.
 - macro expansion -> Facet `QueryDb#expand` -> generated-declaration delta under
   `facet-macro:` URIs -> primary Facet semantic index; the legacy interpreter
-  covers unsupported type-aware macro APIs during cutover.
+  covers unsupported type-aware macro APIs during cutover. Supported user macro
+  blocks preserve caller AST through `yield`, `block.body`, and `block.args`.
 - diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
 
 ## Semantic Index notes

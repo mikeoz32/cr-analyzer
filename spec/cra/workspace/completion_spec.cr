@@ -134,6 +134,40 @@ describe CRA::Workspace do
     end
   end
 
+  it "indexes declarations generated from Facet user macro blocks" do
+    code = <<-CRYSTAL
+      macro define_type(name, &block)
+        class {{name.id}}
+          {{yield}}
+        end
+      end
+
+      define_type Generated do
+        def ping
+        end
+      end
+
+      def call(value : Generated)
+        value.pi
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "macro_block.cr")
+      File.write(path, code)
+      workspace = workspace_for(dir)
+      uri = "file://#{path}"
+      index = index_for(code, "value.pi") + "value.pi".size
+
+      items = workspace.complete(completion_request(uri, position_for(code, index), "."))
+
+      labels(items).should contain("ping")
+      generated = workspace.facet_analyzer.find_class("Generated").not_nil!
+      generated.file.not_nil!.should start_with("facet-macro:")
+      generated.methods.map(&.name).should contain("ping")
+    end
+  end
+
   it "completes instance methods on typed locals" do
     code = <<-CRYSTAL
       class Greeter
