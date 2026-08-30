@@ -12,8 +12,7 @@ semantic index. Facet owns completion syntax and common inference, navigation,
 hover, signature help, references, rename, highlights, and type hierarchy,
 including error-tolerant buffers rejected by Crystal::Parser. The Crystal path
 remains an explicit fallback for macro-generated declarations, unsupported
-inference shapes, call-graph construction, inline values, and remaining semantic
-consumers.
+inference shapes, call-graph construction, and remaining semantic consumers.
 
 ## Setup
 
@@ -48,7 +47,7 @@ consumers.
   -> providers; legacy NodeFinder remains a fallback for unsupported shapes.
 - navigation/hover/signature/references/rename/type hierarchy -> FacetNodeFinder
   -> Facet semantic index/occurrence collector; legacy NodeFinder is fallback.
-- call hierarchy edges and inline values -> temporary Crystal AST consumers.
+- call hierarchy edges -> temporary Crystal AST consumer.
 - diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
 
 ## Semantic Index notes

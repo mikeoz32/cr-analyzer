@@ -50,7 +50,7 @@ Active development. Implemented LSP features include completion (with resolve), 
   rename, highlights, and type hierarchy are Facet-first and work in many
   Crystal-rejected incomplete buffers. The temporary Crystal AST remains for
   macro-generated declarations, unsupported inference fallback, call-graph
-  construction, inline values, and remaining cutover work.
+  construction, and remaining cutover work.
 
 ## Usage
 

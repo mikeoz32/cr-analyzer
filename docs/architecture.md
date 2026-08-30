@@ -29,7 +29,7 @@ This document describes the major runtime pieces and the request flow.
    FacetNodeFinder -> Facet semantic resolution; legacy resolution is fallback.
 6. references/rename/highlights -> Facet symbol occurrence collector; legacy
    Crystal visitors are fallback.
-7. type hierarchy -> Facet semantic index; call hierarchy edges -> temporary
+7. type hierarchy and inline values -> Facet; call hierarchy edges -> temporary
    Crystal-built SemanticIndex call graph.
 8. diagnostics -> cached Facet parse + local lints -> publish/pull; Crystal::Parser is the fallback.
 
@@ -54,7 +54,7 @@ The server currently maintains two syntax paths during cutover:
   inference plus navigation, references, rename, highlights, and type hierarchy.
 - Crystal::Parser produces the temporary `Crystal::ASTNode` tree consumed by
   macro expansion, unsupported completion inference fallback, call-graph
-  construction, inline values, and remaining SemanticIndex consumers.
+  construction, and remaining SemanticIndex consumers.
 
 Facet's AST remains native and arena-backed; cr-analyzer consumes its stable
 named query API rather than a Crystal AST compatibility layer. The Crystal path

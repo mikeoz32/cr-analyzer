@@ -768,12 +768,62 @@ module CRA
     def inline_values(request : Types::InlineValueRequest) : Array(Types::InlineValue)
       document = document(request.text_document.uri)
       return [] of Types::InlineValue unless document
+      if syntax = document.facet_syntax
+        return facet_inline_values(syntax, request.range, request.text_document.uri)
+      end
       program = document.program
       return [] of Types::InlineValue unless program
 
       collector = InlineValueCollector.new(request.range)
       program.accept(collector)
       collector.values
+    end
+
+    private def facet_inline_values(
+      tree : Facet::Compiler::SyntaxTree,
+      requested_range : Types::Range,
+      uri : String,
+    ) : Array(Types::InlineValue)
+      values = [] of Types::InlineValue
+      seen = Set(String).new
+      tree.root.descendants.each do |node|
+        name = case node.kind
+               when Facet::Compiler::NodeKind::InstanceVar, Facet::Compiler::NodeKind::ClassVar
+                 node.symbol_name
+               when Facet::Compiler::NodeKind::Param, Facet::Compiler::NodeKind::Splat,
+                    Facet::Compiler::NodeKind::DoubleSplat, Facet::Compiler::NodeKind::BlockParam
+                 node.name
+               when Facet::Compiler::NodeKind::Ident
+                 next unless facet_local_identifier?(node)
+                 definitions = facet_definitions_for_candidate(node, uri)
+                 next unless definitions.any?(&.is_a?(Psi::LocalVar))
+                 node.symbol_name
+               else
+                 nil
+               end
+        next unless name && !name.empty?
+        span = node.name_span || node.span
+        range = facet_range(tree, span)
+        next unless lsp_ranges_overlap?(range, requested_range)
+        key = "#{name}:#{range.start_position.line}:#{range.start_position.character}"
+        next if seen.includes?(key)
+        seen << key
+        values << Types::InlineValueVariableLookup.new(
+          range: range,
+          case_sensitive_lookup: true,
+          variable_name: name
+        )
+      end
+      values
+    end
+
+    private def lsp_ranges_overlap?(left : Types::Range, right : Types::Range) : Bool
+      !lsp_position_after?(left.start_position, right.end_position) &&
+        !lsp_position_after?(right.start_position, left.end_position)
+    end
+
+    private def lsp_position_after?(left : Types::Position, right : Types::Position) : Bool
+      left.line > right.line || (left.line == right.line && left.character > right.character)
     end
 
     def document_diagnostics(request : Types::DocumentDiagnosticRequest) : Types::DocumentDiagnosticReport
