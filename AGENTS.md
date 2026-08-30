@@ -24,6 +24,7 @@ unsupported inference shapes, and remaining semantic consumers.
 - Facet-only workspace contract: CRA_FACET_ONLY=1 crystal spec spec/cra/workspace
 - End-to-end LSP test: uv run pytest
 - Facet semantic parity: crystal run scripts/check_facet_semantic_parity.cr
+- Initialize benchmark: python3 scripts/bench_lsp_initialize.py
 - Manual client: uv run main.py (uses the Python env in pyproject.toml)
 
 ## Repo layout

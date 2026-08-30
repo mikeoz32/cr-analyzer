@@ -132,6 +132,20 @@ Run the LSP cutover gate without constructing any Crystal AST:
 CRA_FACET_ONLY=1 crystal spec spec/cra/workspace
 ```
 
+After a release build, compare end-to-end initialization with and without the
+temporary Crystal frontend:
+
+```console
+python3 scripts/bench_lsp_initialize.py --repeat 3
+```
+
+Local release-build baseline on 2026-08-30, scanning this repository and the
+installed stdlib after one warmup per mode (three alternating samples): legacy
+initialization was 6.180-7.021 s, median 6.400 s; Facet-only was 3.516-4.758 s,
+median 3.637 s. The median improvement was 1.76x. Treat these as local
+orientation rather than portable throughput; the script reports every sample
+so changes can be compared under the same environment.
+
 ## Ownership
 
 Facet owns source text, revisions, lexing, parsing, syntax diagnostics, native

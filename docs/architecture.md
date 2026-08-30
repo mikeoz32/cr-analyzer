@@ -83,6 +83,11 @@ the full workspace LSP suite must pass while `WorkspaceDocument#program` stays
 nil. This prevents apparently successful Facet results from silently depending
 on a Crystal parser fallback.
 
+`scripts/bench_lsp_initialize.py` measures the same release binary and workspace
+with both frontend modes, warms each mode, and alternates sample order to reduce
+filesystem-cache bias. Keep the per-run range alongside the median when using
+it to justify a default-mode change.
+
 Incrementality is currently file-grained: unchanged files and unchanged text
 reuse query results, while an edited file is lexed and parsed again. Subtree-level
 incremental parsing can be added later without changing the workspace/query API.

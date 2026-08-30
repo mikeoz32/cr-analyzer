@@ -97,6 +97,7 @@ The server uses CRYSTAL_PATH or CRYSTAL_HOME to locate the stdlib. If unset it f
 
 - Run specs: crystal spec
 - Run the no-Crystal-AST workspace contract: `CRA_FACET_ONLY=1 crystal spec spec/cra/workspace`
+- Compare built-server initialization modes: `python3 scripts/bench_lsp_initialize.py`
 - Quick client harness: uv run main.py (uses the Python env in pyproject.toml)
 - Debug: CRA_DUMP_ROOTS=1 to dump index roots after initial scan
 
