@@ -27,7 +27,7 @@ roles, spans, and symbols.
 | References, rename, document highlights | Facet-first scope-aware occurrence collection; Crystal fallback remains |
 | Inline values | Facet syntax plus semantic local classification |
 | Call graph | Facet per-file call-site cache plus lazy revision-cached semantic resolution; Crystal fallback for legacy items |
-| Macro support | Separate cr-analyzer interpreter; Facet expansion is not consumed yet |
+| Macro support | Facet `QueryDb#expand` plus generated-declaration delta is primary for standard declaration macros and supported user macros; Crystal interpreter is fallback for unsupported type-aware APIs |
 
 Each URI has a stable Facet `FileId`. A document version is parsed once and its
 `AstFile`, `SyntaxTree`, diagnostics, parent map, and line index are reused by
@@ -39,6 +39,11 @@ The server advertises incremental LSP text synchronization and applies UTF-16
 range edits before advancing the Facet source revision. Frontend invalidation is
 currently file-grained: an edited file is reparsed, but unchanged files and
 unrelated macro expansions stay cached.
+
+Project-owned macro consumers are materialized during the initial semantic
+pass. Dependency and stdlib consumers remain lazy/legacy until needed; dirty
+queues contain only expansions that were actually materialized, preventing an
+editor startup from eagerly expanding the entire toolchain.
 
 ## Completed gates
 
@@ -78,18 +83,24 @@ unrelated macro expansions stay cached.
   edge caching, edit invalidation, cross-file typed receivers, constructors,
   class methods, `super`, and authoritative empty results in buffers rejected
   by Crystal::Parser.
+- Ordinary and bare user macro calls resolve by lexical scope and arity in
+  Facet; standard accessor families and `record` have Facet-native lowering.
+- Expanded Facet ASTs feed generated-only semantic slices, including completion,
+  navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
+  edits reindex only the footprint-invalidated consumer files.
 
 ## Remaining cutover work
 
 1. Extend Facet inference across the remaining literal, implicit-call, destructure,
    and control-flow shapes, then retire the completion fallback.
 2. Extend call-graph differential coverage across overloads, dynamic receivers,
-   macro-generated methods, and representative workspaces, then retire its
-   legacy Crystal fallback.
+   and representative workspaces, then retire its legacy Crystal fallback.
 3. Compare Facet-first public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
-4. Feed Facet's fully expanded AST into semantic indexing, then remove the
-   cr-analyzer macro interpreter and all `compiler/crystal/syntax` requires.
+4. Extend Facet macro evaluation across type introspection, the remaining
+   AST-node APIs, require-aware provider visibility, and full block/yield
+   semantics; then remove the cr-analyzer interpreter and all
+   `compiler/crystal/syntax` requires.
 
 Run the local declaration gate after semantic changes:
 

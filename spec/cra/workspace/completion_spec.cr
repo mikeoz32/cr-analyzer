@@ -43,6 +43,53 @@ def labels(items : Array(CRA::Types::CompletionItem)) : Array(String)
 end
 
 describe CRA::Workspace do
+  it "completes Facet macro-generated methods without a Crystal AST" do
+    box_code = <<-CRYSTAL
+      class Box
+        make_getter :before
+      end
+    CRYSTAL
+    client_code = <<-CRYSTAL
+      class Client
+        def test(box : Box)
+          box.be
+        end
+      end
+    CRYSTAL
+    editing_client_code = client_code + "broken(\n"
+    macro_code = <<-CRYSTAL
+      macro make_getter(name)
+        def {{name.id}}
+          @{{name.id}}
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      box_path = File.join(dir, "a_box.cr")
+      client_path = File.join(dir, "b_client.cr")
+      macro_path = File.join(dir, "z_macros.cr")
+      File.write(box_path, box_code)
+      File.write(client_path, client_code)
+      File.write(macro_path, macro_code)
+      workspace = workspace_for(dir)
+      uri = "file://#{client_path}"
+
+      workspace.analyzer.find_class("Box").not_nil!.methods.map(&.name).should_not contain("before")
+      generated = workspace.facet_analyzer.find_class("Box").not_nil!.methods.find { |method| method.name == "before" }.not_nil!
+      generated.file.not_nil!.should start_with("facet-macro:")
+
+      document = workspace.document(uri).not_nil!
+      document.update(editing_client_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+      index = index_for(editing_client_code, "box.be") + "box.be".size
+      items = workspace.complete(completion_request(uri, position_for(editing_client_code, index), "."))
+
+      labels(items).should contain("before")
+    end
+  end
+
   it "completes instance methods on typed locals" do
     code = <<-CRYSTAL
       class Greeter

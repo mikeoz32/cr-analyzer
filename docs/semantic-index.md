@@ -2,8 +2,8 @@
 
 SemanticIndex is the core semantic database used for completion and definition.
 The Facet-native producer populates the primary editor index; the temporary
-Crystal producer remains as a fallback for macro expansion and unsupported
-semantic shapes.
+Crystal producer remains as a fallback for unsupported type-aware macro
+expansion and semantic shapes.
 
 ## Data model
 
@@ -20,6 +20,9 @@ semantic shapes.
   until the expansion cutover is complete.
 - FacetCallGraphIndex: replaces call sites only for reindexed files, then lazily
   resolves and revision-caches incoming/outgoing semantic edges.
+- Facet expanded-declaration pass: subtracts raw declaration contracts from the
+  cached expanded tree and indexes only generated declarations under a stable
+  virtual URI.
 - Macro pre-expansion: expands supported macros into virtual files for indexing.
 
 ## Type hints
@@ -52,7 +55,10 @@ Include/extend and superclass edges are tracked. When a file changes, dependent 
 
 Supported macros:
 
-- built-in: getter, setter, property, record
-- user-defined: interpreted via a small MacroInterpreter
+- Facet-native: accessor macro families, `record`, and user-defined macros in
+  the supported lexical/control/value subset
+- Crystal fallback: unsupported compile-time type introspection and AST-node
+  macro APIs
 
-Expanded nodes are indexed under crystal-macro: virtual URIs.
+Facet-generated nodes are indexed under `facet-macro:` virtual URIs. Legacy
+fallback nodes retain `crystal-macro:` URIs until the cutover is complete.

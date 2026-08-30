@@ -304,4 +304,57 @@ describe CRA::Workspace do
       super_callers.map(&.from.detail).should contain("Worker")
     end
   end
+
+  it "connects calls to Facet macro-generated methods" do
+    box_code = <<-CRYSTAL
+      class Box
+        make_getter :value
+      end
+    CRYSTAL
+    client_code = <<-CRYSTAL
+      class Client
+        def invoke(box : Box)
+          box.value
+        end
+      end
+    CRYSTAL
+    editing_client_code = client_code + "broken(\n"
+    macro_code = <<-CRYSTAL
+      macro make_getter(name)
+        def {{name.id}}
+          @{{name.id}}
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      box_path = File.join(dir, "a_box.cr")
+      client_path = File.join(dir, "b_client.cr")
+      macro_path = File.join(dir, "z_macros.cr")
+      File.write(box_path, box_code)
+      File.write(client_path, client_code)
+      File.write(macro_path, macro_code)
+      workspace = workspace_for(dir)
+      uri = "file://#{client_path}"
+      document = workspace.document(uri).not_nil!
+      document.update(editing_client_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      invoke_name = index_for(editing_client_code, "invoke") + 1
+      invoke_item = workspace.prepare_call_hierarchy(
+        call_hierarchy_prepare_request(uri, position_for(editing_client_code, invoke_name))
+      ).first
+      outgoing = workspace.call_hierarchy_outgoing(outgoing_request(invoke_item))
+      outgoing.map(&.to.name).should contain("value")
+      outgoing.find { |call| call.to.name == "value" }.not_nil!.to.uri.should start_with("facet-macro:")
+
+      value_call = index_for(editing_client_code, "box.value") + "box.".size + 1
+      value_item = workspace.prepare_call_hierarchy(
+        call_hierarchy_prepare_request(uri, position_for(editing_client_code, value_call))
+      ).first
+      incoming = workspace.call_hierarchy_incoming(incoming_request(value_item))
+      incoming.map(&.from.name).should contain("invoke")
+    end
+  end
 end

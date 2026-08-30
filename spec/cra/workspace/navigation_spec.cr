@@ -60,6 +60,52 @@ private def implementation_request(uri : String, position : CRA::Types::Position
 end
 
 describe CRA::Workspace do
+  it "navigates to a Facet macro-generated method without a Crystal AST" do
+    box_code = <<-CRYSTAL
+      class Box
+        make_getter :value
+      end
+    CRYSTAL
+    client_code = <<-CRYSTAL
+      class Client
+        def test(box : Box)
+          box.value
+        end
+      end
+    CRYSTAL
+    editing_client_code = client_code + "broken(\n"
+    macro_code = <<-CRYSTAL
+      macro make_getter(name)
+        def {{name.id}}
+          @{{name.id}}
+        end
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      box_path = File.join(dir, "a_box.cr")
+      client_path = File.join(dir, "b_client.cr")
+      macro_path = File.join(dir, "z_macros.cr")
+      File.write(box_path, box_code)
+      File.write(client_path, client_code)
+      File.write(macro_path, macro_code)
+      workspace = workspace_for(dir)
+      uri = "file://#{client_path}"
+      document = workspace.document(uri).not_nil!
+      document.update(editing_client_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      value_index = index_for(editing_client_code, "box.value") + "box.".size + 2
+      declarations = workspace.find_declarations(
+        declaration_request(uri, position_for(editing_client_code, value_index))
+      )
+
+      declarations.size.should eq(1)
+      declarations.first.uri.should start_with("facet-macro:")
+    end
+  end
+
   it "returns declaration locations for method calls" do
     code = <<-CRYSTAL
       class Greeter

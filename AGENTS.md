@@ -11,8 +11,8 @@ selection ranges, document/workspace symbols, and the primary declaration-level
 semantic index. Facet owns completion syntax and common inference, navigation,
 hover, signature help, references, rename, highlights, and type hierarchy,
 including error-tolerant buffers rejected by Crystal::Parser. The Crystal path
-remains an explicit fallback for macro-generated declarations, unsupported
-inference shapes, and remaining semantic consumers.
+remains an explicit fallback for unsupported type-aware macro expansion,
+unsupported inference shapes, and remaining semantic consumers.
 
 ## Setup
 
@@ -49,13 +49,18 @@ inference shapes, and remaining semantic consumers.
   -> Facet semantic index/occurrence collector; legacy NodeFinder is fallback.
 - call hierarchy edges -> per-file Facet call-site cache -> lazy revision-cached
   semantic resolution; legacy Crystal edges are fallback only for legacy items.
+- macro expansion -> Facet `QueryDb#expand` -> generated-declaration delta under
+  `facet-macro:` URIs -> primary Facet semantic index; the legacy interpreter
+  covers unsupported type-aware macro APIs during cutover.
 - diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
 
 ## Semantic Index notes
 
 - Two passes: SkeletonIndexer (type shells) and SemanticIndexer (methods/includes/enums/aliases).
 - TypeRef is lightweight: name + generic args + union types. Inference is best-effort (annotations, Foo.new, Array/Hash literals with of).
-- Macro expansion is limited; expanded code is indexed under crystal-macro: URIs.
+- Facet expands standard declaration macros and the supported user-macro subset;
+  generated declarations are indexed under `facet-macro:` URIs. Unsupported
+  legacy expansions remain under `crystal-macro:` URIs.
 
 ## Parser boundary
 
@@ -73,7 +78,14 @@ inference shapes, and remaining semantic consumers.
 - Facet's declaration-level semantic producer is the primary completion and
   navigation index for types, methods, aliases, includes, inheritance, enum
   members, docs, and locations. Keep the Crystal index as a measured fallback
-  until macro expansion and the remaining semantic consumers move.
+  until type-aware macro APIs and the remaining semantic consumers move.
+- Facet expansion consumers are invalidated from macro-name footprints. Reindex
+  `pending_expansion_file_ids` only, remove the stable virtual-file slice first,
+  and index only the generated declaration delta rather than duplicating the
+  full expanded source.
+- Keep macro expansion in the materialized project/on-demand QueryDb; do not
+  make editor initialization build a global expansion index over stdlib and
+  `lib` sources.
 - Facet call-graph extraction is file-grained. Preserve call sites for unchanged
   files and invalidate the lazily resolved edge set when any indexed file
   revision changes; an authoritative empty Facet result must not fall back to a

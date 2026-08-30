@@ -41,16 +41,20 @@ Active development. Implemented LSP features include completion (with resolve), 
 
 ## Limitations
 
-- No full compiler type checking or macro expansion. Type inference is best-effort based on annotations and simple assignments.
-- Macro expansion is limited to built-in macros (getter, setter, property, record) and a small interpreter for user-defined macros.
+- No full compiler type checking or complete type-aware macro expansion. Type inference is best-effort based on annotations and simple assignments.
+- Facet incrementally expands standard declaration macros and a substantial
+  user-macro subset. Crystal-backed fallback remains for unsupported
+  compile-time type introspection and AST-node macro APIs.
 - Rename is best-effort and currently scoped to workspace files (stdlib is not edited).
 - Facet owns the incremental document store, cached syntax/diagnostics, UTF-16
   mapping, cursor lookup, selection ranges, symbols, and the primary declaration
   semantic index. Completion, navigation, hover, signature help, references,
   rename, highlights, type hierarchy, and the incrementally invalidated call
   graph are Facet-first and work in many Crystal-rejected incomplete buffers.
-  The temporary Crystal AST remains for macro-generated declarations,
-  unsupported inference fallback, and remaining cutover work.
+  Supported macro-generated declarations also enter the Facet semantic index
+  through incrementally invalidated `facet-macro:` slices. The temporary Crystal
+  AST remains for unsupported macro semantics, inference fallback, and remaining
+  cutover work.
 
 ## Usage
 

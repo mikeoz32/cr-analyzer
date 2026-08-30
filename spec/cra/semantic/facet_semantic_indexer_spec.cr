@@ -145,4 +145,41 @@ describe CRA::Psi::FacetSemanticIndexer do
     methods["named"].return_type_ref.not_nil!.display.should eq("NamedTuple")
     methods["optional"].return_type_ref.not_nil!.display.should eq("Tuple(String, Int32) | Nil")
   end
+
+  it "indexes only declarations added by a Facet macro expansion" do
+    code = <<-CRYSTAL
+      macro make_getter(name)
+        def {{name.id}}
+          @{{name.id}}
+        end
+      end
+
+      class Box
+        def existing
+        end
+
+        make_getter :value
+      end
+    CRYSTAL
+    uri = "file:///macro-source.cr"
+    virtual_uri = "facet-macro:/macro-source.cr"
+    manager = Facet::Compiler::SourceManager.new
+    file_id = manager.add(code, "macro-source.cr")
+    queries = Facet::Compiler::QueryDb.new(manager)
+    original = queries.syntax(file_id)
+    expanded = Facet::Compiler::SyntaxTree.new(queries.expand(file_id))
+
+    index = CRA::Psi::SemanticIndex.new
+    index.enter(uri)
+    indexer = CRA::Psi::FacetSemanticIndexer.new(index)
+    indexer.index(original)
+    index.enter(virtual_uri)
+    indexer.index_generated(expanded, original)
+
+    methods = index.find_class("Box").not_nil!.methods
+    methods.count { |method| method.name == "existing" }.should eq(1)
+    methods.count { |method| method.name == "value" }.should eq(1)
+    methods.find { |method| method.name == "existing" }.not_nil!.file.should eq(uri)
+    methods.find { |method| method.name == "value" }.not_nil!.file.should eq(virtual_uri)
+  end
 end

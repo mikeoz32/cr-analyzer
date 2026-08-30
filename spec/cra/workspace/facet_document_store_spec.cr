@@ -157,4 +157,111 @@ describe CRA::FacetDocumentStore do
       workspace.facet_analyzer.find_class("Editing").not_nil!.methods.map(&.name).should contain("value")
     end
   end
+
+  it "caches expanded syntax and exposes invalidated macro consumers" do
+    with_tmpdir do |dir|
+      macro_path = File.join(dir, "macros.cr")
+      use_path = File.join(dir, "use.cr")
+      macro_uri = "file://#{macro_path}"
+      use_uri = "file://#{use_path}"
+      before_macro = <<-CRYSTAL
+        macro make_method
+          def before
+          end
+        end
+      CRYSTAL
+      after_macro = <<-CRYSTAL
+        macro make_method
+          def after
+          end
+        end
+      CRYSTAL
+      use_code = <<-CRYSTAL
+        class Box
+          make_method
+        end
+      CRYSTAL
+      store = CRA::FacetDocumentStore.new
+      store.register(macro_uri, before_macro, macro_path)
+      store.register(use_uri, use_code, use_path)
+      store.enable_expansion(macro_uri)
+
+      first = store.expanded_syntax(use_uri).not_nil!
+      first.nodes(Facet::Compiler::NodeKind::Def).map(&.name).should contain("before")
+      executions = store.expansion_queries.stats.expand_executions
+      store.expanded_syntax(use_uri).not_nil!.same?(first).should be_true
+      store.expansion_queries.stats.expand_executions.should eq(executions)
+
+      store.register(macro_uri, after_macro, macro_path)
+      store.pending_expansion_uris.should contain(use_uri)
+      second = store.expanded_syntax(use_uri).not_nil!
+      second.same?(first).should be_false
+      second.nodes(Facet::Compiler::NodeKind::Def).map(&.name).should contain("after")
+      store.expansion_queries.stats.expand_executions.should eq(executions + 1)
+      store.pending_expansion_uris.should_not contain(use_uri)
+    end
+  end
+
+  it "reindexes Facet macro-generated declarations after a provider edit" do
+    with_tmpdir do |dir|
+      macro_path = File.join(dir, "a_macros.cr")
+      use_path = File.join(dir, "b_use.cr")
+      macro_uri = "file://#{macro_path}"
+      use_uri = "file://#{use_path}"
+      before_macro = <<-CRYSTAL
+        macro make_method
+          def before
+          end
+        end
+      CRYSTAL
+      after_macro = <<-CRYSTAL
+        macro make_method
+          def after
+          end
+        end
+      CRYSTAL
+      File.write(macro_path, before_macro)
+      File.write(use_path, <<-CRYSTAL)
+        class Box
+          make_method
+        end
+      CRYSTAL
+      workspace = workspace_for(dir)
+
+      before = workspace.facet_analyzer.find_class("Box").not_nil!.methods.find { |method| method.name == "before" }.not_nil!
+      before.file.not_nil!.should start_with("facet-macro:")
+
+      document = workspace.document(macro_uri).not_nil!
+      document.update(after_macro)
+      document.program.should_not be_nil
+      reindexed = workspace.reindex_file(macro_uri, document.program)
+
+      reindexed.should contain(use_uri)
+      methods = workspace.facet_analyzer.find_class("Box").not_nil!.methods
+      methods.map(&.name).should contain("after")
+      methods.map(&.name).should_not contain("before")
+      methods.find { |method| method.name == "after" }.not_nil!.file.not_nil!.should start_with("facet-macro:")
+    end
+  end
+
+  it "indexes standard accessor macros through Facet without a stdlib scan" do
+    with_tmpdir do |dir|
+      path = File.join(dir, "accessors.cr")
+      File.write(path, <<-CRYSTAL)
+        class User
+          property name : String
+          class_getter version : Int32
+        end
+      CRYSTAL
+      workspace = workspace_for(dir)
+      methods = workspace.facet_analyzer.find_class("User").not_nil!.methods
+
+      methods.map(&.name).should contain("name")
+      methods.map(&.name).should contain("name=")
+      methods.find { |method| method.name == "name" }.not_nil!.file.not_nil!.should start_with("facet-macro:")
+      version = methods.find { |method| method.name == "version" }.not_nil!
+      version.class_method.should be_true
+      version.file.not_nil!.should start_with("facet-macro:")
+    end
+  end
 end

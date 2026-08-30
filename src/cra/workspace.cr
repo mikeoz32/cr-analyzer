@@ -87,6 +87,7 @@ module CRA
       scan_path(lib_path, seen) if Dir.exists?(lib_path.to_s)
 
       scan_path(@path, seen)
+      index_all_facet_expansions
       @analyzer.dump_roots if ENV["CRA_DUMP_ROOTS"]? == "1"
     end
 
@@ -190,8 +191,10 @@ module CRA
         @facet_indexer.index(uri, syntax)
         index_facet_semantics(uri, syntax)
         @facet_call_graph.index(uri, syntax, @facet_store.revision(uri).not_nil!)
+        index_facet_expansion(uri, syntax)
       end
       reindexed << uri
+      reindexed.concat(reindex_pending_facet_expansions(uri))
       return reindexed unless program
 
       old_types = @analyzer.type_names_for_file(uri)
@@ -249,6 +252,57 @@ module CRA
       Psi::FacetSemanticIndexer.new(@facet_analyzer).index(syntax)
     rescue ex : Exception
       Log.error { "Error indexing Facet syntax for #{uri}: #{ex.message}" }
+    end
+
+    private def index_all_facet_expansions : Nil
+      uris = @facet_store.uris.select { |uri| project_owned_uri?(uri) }
+      uris.each { |uri| @facet_store.enable_expansion(uri) }
+      uris.each do |uri|
+        syntax = @facet_store.syntax(uri)
+        index_facet_expansion(uri, syntax) if syntax
+      end
+    end
+
+    private def project_owned_uri?(uri : String) : Bool
+      path = URI.parse(uri).path
+      root = @path.to_s.rstrip('/')
+      return false unless path == root || path.starts_with?("#{root}/")
+      !path.starts_with?("#{root}/lib/")
+    rescue
+      false
+    end
+
+    private def index_facet_expansion(uri : String, original : Facet::Compiler::SyntaxTree) : Nil
+      virtual_uri = facet_macro_uri(uri)
+      @facet_analyzer.remove_file(virtual_uri)
+      expanded = @facet_store.expanded_syntax(uri)
+      return unless expanded
+
+      @facet_analyzer.enter(virtual_uri)
+      Psi::FacetSemanticIndexer.new(@facet_analyzer).index_generated(expanded, original)
+    rescue ex : Exception
+      Log.error { "Error indexing Facet macro expansion for #{uri}: #{ex.message}" }
+    end
+
+    private def reindex_pending_facet_expansions(current_uri : String) : Array(String)
+      reindexed = [] of String
+      attempted = Set(String).new
+      attempted << current_uri
+      loop do
+        pending = @facet_store.pending_expansion_uris.reject { |uri| attempted.includes?(uri) }
+        break if pending.empty?
+        pending.each do |uri|
+          attempted << uri
+          next unless syntax = @facet_store.syntax(uri)
+          index_facet_expansion(uri, syntax)
+          reindexed << uri
+        end
+      end
+      reindexed
+    end
+
+    private def facet_macro_uri(uri : String) : String
+      "facet-macro:#{uri.sub("file://", "")}"
     end
 
     def complete(request : Types::CompletionRequest) : Array(Types::CompletionItem)
@@ -891,7 +945,7 @@ module CRA
         def_loc = def_node.location
         def_file = def_node.file
         next unless def_loc && def_file
-        uri = def_file.starts_with?("file://") ? def_file : "file://#{def_file}"
+        uri = psi_file_uri(def_file)
         key = "#{uri}:#{def_loc.start_line}:#{def_loc.start_character}:#{def_loc.end_line}:#{def_loc.end_character}"
         next if seen[key]?
         seen[key] = true
@@ -1435,7 +1489,7 @@ module CRA
       loc = element.location
       file = element.file
       return nil unless loc && file
-      uri = file.starts_with?("file://") ? file : "file://#{file}"
+      uri = psi_file_uri(file)
       range = loc.to_range
       data = if facet && (method = element.as?(Psi::Method))
                JSON::Any.new({"facetMethodKey" => JSON::Any.new(method_key(method.owner.try(&.name) || "", method.class_method, method.name))})
@@ -1459,7 +1513,7 @@ module CRA
       loc = element.location
       file = element.file
       return nil unless loc && file
-      uri = file.starts_with?("file://") ? file : "file://#{file}"
+      uri = psi_file_uri(file)
       range = loc.to_range
       Types::TypeHierarchyItem.new(
         name: element.name,
@@ -1486,6 +1540,12 @@ module CRA
       else
         Types::SymbolKind::Object
       end
+    end
+
+    private def psi_file_uri(file : String) : String
+      URI.parse(file).scheme ? file : "file://#{file}"
+    rescue
+      "file://#{file}"
     end
 
     # Collects inline value variable lookups within a requested range.

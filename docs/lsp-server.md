@@ -43,8 +43,10 @@ ServerCapabilities are kept in sync with implemented handlers. Notable gaps: sem
   inline values, type hierarchy, and call hierarchy use Facet first, including
   tested Crystal-rejected buffers. Call sites are cached per file and semantic
   edges are resolved lazily per workspace revision.
-  Macro-generated declarations, unsupported inference, and remaining fallbacks
-  still use the temporary Crystal AST path during cutover.
+  Supported macro-generated declarations use Facet's cached expansion and
+  generated-only semantic slices. Unsupported type-aware macro APIs, inference,
+  and remaining fallbacks still use the temporary Crystal AST path during
+  cutover.
 
 ## Manual testing
 

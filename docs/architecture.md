@@ -14,6 +14,8 @@ This document describes the major runtime pieces and the request flow.
   the primary completion/navigation `SemanticIndex`.
 - `CRA::FacetCallGraphIndex`: per-file Facet call-site cache with lazy semantic
   edge resolution and revision invalidation.
+- Facet expanded declaration slices: cached `QueryDb#expand` results are diffed
+  against raw syntax and indexed under stable `facet-macro:` URIs.
 - Facet 0.1.5 `QueryDb` / `SyntaxTree`: revisioned syntax, diagnostics, cursor,
   document-symbol, and editor-position queries.
 - Completion providers: `SemanticIndex`, `KeywordCompletionProvider`, `RequirePathCompletionProvider`.
@@ -44,6 +46,14 @@ This document describes the major runtime pieces and the request flow.
 - Call-site extraction replaces only the edited file's slice. Resolved call
   edges are computed on demand, reused for an unchanged workspace revision, and
   invalidated globally when declarations or call sites change.
+- Macro provider edits invalidate only expansion consumers recorded in Facet's
+  macro-name footprint. Their old virtual semantic slices are removed before
+  generated declaration deltas are reindexed.
+- Initial eager expansion is limited to project-owned sources. Dependency and
+  stdlib macro declarations remain on the lazy/legacy path until requested, so
+  initialization does not expand thousands of unrelated files. A separate
+  materialized expansion `QueryDb` keeps this provider set independent from the
+  complete syntax database.
 - Crystal::Parser still parses each changed document while semantic consumers
   are being migrated.
 - Reindexing also reindexes dependent types based on include/extend and superclass relationships.
@@ -56,10 +66,11 @@ The server currently maintains two syntax paths during cutover:
 - Facet owns source revisions, parsing, diagnostics, `SyntaxTree`,
   `FacetNodeFinder`, selection ranges, document/workspace symbols, and the primary
   declaration semantic producer. It also owns completion syntax and common
-  inference plus navigation, references, rename, highlights, and type hierarchy.
+  inference plus navigation, references, rename, highlights, type hierarchy,
+  call graph, and supported macro-generated declarations.
 - Crystal::Parser produces the temporary `Crystal::ASTNode` tree consumed by
-  macro expansion, unsupported completion inference fallback, and remaining
-  SemanticIndex consumers.
+  unsupported type-aware macro expansion, completion inference fallback, and
+  remaining SemanticIndex consumers.
 
 Facet's AST remains native and arena-backed; cr-analyzer consumes its stable
 named query API rather than a Crystal AST compatibility layer. The Crystal path
