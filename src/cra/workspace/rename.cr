@@ -8,6 +8,16 @@ module CRA
       document = document(request.text_document.uri)
       return nil unless document
 
+      if facet_finder = document.facet_node_context(request.position)
+        if facet_node = facet_finder.semantic_node
+          if facet_renameable?(facet_node)
+            if span = facet_finder.semantic_name_span
+              return facet_range(facet_finder.tree, span)
+            end
+          end
+        end
+      end
+
       finder = document.node_context(request.position)
       node = finder.node || finder.previous_node
       return nil unless node
@@ -48,6 +58,10 @@ module CRA
       document = document(request.text_document.uri)
       return nil unless document
 
+      if edit = rename_with_facet(document, request.position, request.text_document.uri, new_name)
+        return edit
+      end
+
       finder = document.node_context(request.position)
       node = finder.node || finder.previous_node
       return nil unless node
@@ -87,12 +101,143 @@ module CRA
       Types::WorkspaceEdit.new(changes: changes)
     end
 
+    private def rename_with_facet(
+      document : WorkspaceDocument,
+      position : Types::Position,
+      uri : String,
+      new_name : String,
+    ) : Types::WorkspaceEdit?
+      finder = document.facet_node_context(position)
+      return nil unless finder
+      node = finder.semantic_node
+      return nil unless node && facet_renameable?(node)
+      name = facet_symbol_name(node)
+      return nil unless name && !name.empty? && name != new_name
+
+      occurrences = case node.kind
+                    when Facet::Compiler::NodeKind::Param, Facet::Compiler::NodeKind::Splat,
+                         Facet::Compiler::NodeKind::DoubleSplat, Facet::Compiler::NodeKind::BlockParam
+                      if name.starts_with?("@@")
+                        type_name = finder.enclosing_type_name
+                        type_name ? facet_scoped_variable_occurrences(type_name, name, Facet::Compiler::NodeKind::ClassVar) : [] of FacetOccurrence
+                      elsif name.starts_with?("@")
+                        type_name = finder.enclosing_type_name
+                        type_name ? facet_scoped_variable_occurrences(type_name, name, Facet::Compiler::NodeKind::InstanceVar) : [] of FacetOccurrence
+                      else
+                        facet_local_occurrences(finder, name, uri)
+                      end
+                    when Facet::Compiler::NodeKind::InstanceVar
+                      type_name = finder.enclosing_type_name
+                      type_name ? facet_scoped_variable_occurrences(type_name, name, node.kind) : [] of FacetOccurrence
+                    when Facet::Compiler::NodeKind::ClassVar
+                      type_name = finder.enclosing_type_name
+                      type_name ? facet_scoped_variable_occurrences(type_name, name, node.kind) : [] of FacetOccurrence
+                    when Facet::Compiler::NodeKind::Call, Facet::Compiler::NodeKind::CallWithBlock,
+                         Facet::Compiler::NodeKind::Binary, Facet::Compiler::NodeKind::Def,
+                         Facet::Compiler::NodeKind::Fun
+                      definitions = @facet_analyzer.find_facet_definitions(
+                        node, finder.context_path, finder.byte_offset, finder.enclosing_type_name, uri
+                      )
+                      keys = method_keys_for(definitions)
+                      keys.empty? ? [] of FacetOccurrence : facet_method_occurrences(keys)
+                    when Facet::Compiler::NodeKind::Ident
+                      if !name[0].ascii_uppercase?
+                        definitions = @facet_analyzer.find_facet_definitions(
+                          node, finder.context_path, finder.byte_offset, finder.enclosing_type_name, uri
+                        )
+                        keys = method_keys_for(definitions)
+                        keys.empty? ? facet_local_occurrences(finder, name, uri) : facet_method_occurrences(keys)
+                      else
+                        facet_type_rename_occurrences(node, finder, uri)
+                      end
+                    else
+                      facet_type_rename_occurrences(node, finder, uri)
+                    end
+      return nil if occurrences.empty?
+
+      replacement = case node.kind
+                    when Facet::Compiler::NodeKind::InstanceVar
+                      normalize_instance_var_name(new_name)
+                    when Facet::Compiler::NodeKind::ClassVar
+                      normalize_class_var_name(new_name)
+                    when Facet::Compiler::NodeKind::Param
+                      if name.starts_with?("@@")
+                        normalize_class_var_name(new_name)
+                      elsif name.starts_with?("@")
+                        normalize_instance_var_name(new_name)
+                      else
+                        new_name
+                      end
+                    else
+                      new_name
+                    end
+
+      changes = {} of String => Types::TextEdits
+      occurrences.each do |occurrence|
+        append_edits(changes, occurrence.uri, [Types::TextEdit.new(occurrence.range, replacement)] of Types::TextEdit | Types::AnnotatedTextEdit | Types::SnippetTextEdit)
+      end
+      changes.empty? ? nil : Types::WorkspaceEdit.new(changes: changes)
+    rescue ex
+      Log.error { "Facet rename failed: #{ex.message}" }
+      nil
+    end
+
+    private def facet_type_rename_occurrences(
+      node : Facet::Compiler::SyntaxNode,
+      finder : FacetNodeFinder,
+      uri : String,
+    ) : Array(FacetOccurrence)
+      definitions = @facet_analyzer.find_facet_definitions(
+        node, finder.context_path, finder.byte_offset, finder.enclosing_type_name, uri
+      )
+      keys = type_keys_for(definitions)
+      keys.empty? ? [] of FacetOccurrence : facet_type_occurrences(keys)
+    end
+
+    private def facet_renameable?(node : Facet::Compiler::SyntaxNode) : Bool
+      return false if node.kind == Facet::Compiler::NodeKind::Global
+      return false unless facet_symbol_name(node)
+      {
+        Facet::Compiler::NodeKind::Ident,
+        Facet::Compiler::NodeKind::Const,
+        Facet::Compiler::NodeKind::Path,
+        Facet::Compiler::NodeKind::TypeApply,
+        Facet::Compiler::NodeKind::InstanceVar,
+        Facet::Compiler::NodeKind::ClassVar,
+        Facet::Compiler::NodeKind::Param,
+        Facet::Compiler::NodeKind::Splat,
+        Facet::Compiler::NodeKind::DoubleSplat,
+        Facet::Compiler::NodeKind::BlockParam,
+        Facet::Compiler::NodeKind::Call,
+        Facet::Compiler::NodeKind::CallWithBlock,
+        Facet::Compiler::NodeKind::Binary,
+        Facet::Compiler::NodeKind::Def,
+        Facet::Compiler::NodeKind::Fun,
+        Facet::Compiler::NodeKind::Class,
+        Facet::Compiler::NodeKind::Module,
+        Facet::Compiler::NodeKind::Struct,
+        Facet::Compiler::NodeKind::Enum,
+        Facet::Compiler::NodeKind::Alias,
+        Facet::Compiler::NodeKind::TypeDef,
+      }.includes?(node.kind)
+    end
+
+    private def facet_symbol_name(node : Facet::Compiler::SyntaxNode) : String?
+      if node.call_name
+        node.call_name
+      elsif {Facet::Compiler::NodeKind::Def, Facet::Compiler::NodeKind::Fun}.includes?(node.kind)
+        facet_terminal_name(node.name_node).try(&.symbol_name) || node.name
+      else
+        node.symbol_name || node.name
+      end
+    end
+
     private def rename_local_var(
       node : Crystal::Var,
       new_name : String,
       finder : NodeFinder,
       uri : String,
-      changes : Hash(String, Types::TextEdits)
+      changes : Hash(String, Types::TextEdits),
     )
       if block = block_for_var(node, finder.context_path)
         edits = rename_block_local(block, node.name, new_name)
@@ -108,7 +253,7 @@ module CRA
       new_name : String,
       finder : NodeFinder,
       uri : String,
-      changes : Hash(String, Types::TextEdits)
+      changes : Hash(String, Types::TextEdits),
     )
       edits = rename_def_local(finder.enclosing_def, node.name, new_name)
       append_edits(changes, uri, edits)
@@ -119,7 +264,7 @@ module CRA
       new_name : String,
       finder : NodeFinder,
       uri : String,
-      changes : Hash(String, Types::TextEdits)
+      changes : Hash(String, Types::TextEdits),
     )
       class_name = finder.enclosing_type_name
       return unless class_name
@@ -134,7 +279,7 @@ module CRA
       new_name : String,
       finder : NodeFinder,
       uri : String,
-      changes : Hash(String, Types::TextEdits)
+      changes : Hash(String, Types::TextEdits),
     )
       class_name = finder.enclosing_type_name
       return unless class_name
@@ -149,7 +294,7 @@ module CRA
       new_name : String,
       finder : NodeFinder,
       uri : String,
-      changes : Hash(String, Types::TextEdits)
+      changes : Hash(String, Types::TextEdits),
     )
       definitions = @analyzer.find_definitions(
         node,
@@ -171,7 +316,7 @@ module CRA
       new_name : String,
       finder : NodeFinder,
       uri : String,
-      changes : Hash(String, Types::TextEdits)
+      changes : Hash(String, Types::TextEdits),
     )
       definitions = @analyzer.find_definitions(
         node,
@@ -194,7 +339,7 @@ module CRA
       new_name : String,
       finder : NodeFinder,
       uri : String,
-      changes : Hash(String, Types::TextEdits)
+      changes : Hash(String, Types::TextEdits),
     )
       full_name = qualified_name(node.full, finder.context_path)
       return if full_name.empty?
@@ -209,7 +354,7 @@ module CRA
       enum_name : String,
       member_name : String,
       new_name : String,
-      changes : Hash(String, Types::TextEdits)
+      changes : Hash(String, Types::TextEdits),
     )
       target_keys = {"enum_member:#{enum_name}::#{member_name}" => true}
       edits_by_uri = rename_types_in_workspace(target_keys, new_name, -1)
@@ -249,7 +394,7 @@ module CRA
       class_name : String,
       name : String,
       new_name : String,
-      kind : Symbol
+      kind : Symbol,
     ) : Hash(String, Types::TextEdits)
       return {} of String => Types::TextEdits if name == new_name
 
@@ -268,7 +413,7 @@ module CRA
 
     private def rename_methods_in_workspace(
       target_keys : Hash(String, Bool),
-      new_name : String
+      new_name : String,
     ) : Hash(String, Types::TextEdits)
       edits_by_uri = {} of String => Types::TextEdits
       workspace_file_uris.each do |file_uri|
@@ -299,7 +444,7 @@ module CRA
     private def rename_types_in_workspace(
       target_keys : Hash(String, Bool),
       new_name : String,
-      segment_index : Int32
+      segment_index : Int32,
     ) : Hash(String, Types::TextEdits)
       type_targets = {} of String => Bool
       enum_member_targets = {} of String => Bool

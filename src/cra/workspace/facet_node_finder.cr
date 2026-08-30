@@ -30,6 +30,58 @@ module CRA
       current.ancestors.reverse + [current]
     end
 
+    # Returns the semantic construct named at the cursor rather than merely the
+    # smallest leaf. Member names resolve to the outer access so consumers keep
+    # the receiver; declaration and parameter names resolve to their owner.
+    def semantic_node : Facet::Compiler::SyntaxNode?
+      path = context_path
+      if candidate = path.reverse_each.find do |candidate|
+           candidate.receiver && span_at_cursor?(candidate.callee.try(&.name_span))
+         end
+        return candidate
+      end
+
+      if candidate = path.reverse_each.find do |candidate|
+           {Facet::Compiler::NodeKind::Call, Facet::Compiler::NodeKind::CallWithBlock}.includes?(candidate.kind) &&
+           span_at_cursor?(candidate.callee.try(&.name_span))
+         end
+        return candidate
+      end
+
+      path.reverse_each.find do |candidate|
+        {
+          Facet::Compiler::NodeKind::Def,
+          Facet::Compiler::NodeKind::Fun,
+          Facet::Compiler::NodeKind::Class,
+          Facet::Compiler::NodeKind::Module,
+          Facet::Compiler::NodeKind::Struct,
+          Facet::Compiler::NodeKind::Enum,
+          Facet::Compiler::NodeKind::Lib,
+          Facet::Compiler::NodeKind::Alias,
+          Facet::Compiler::NodeKind::TypeDef,
+          Facet::Compiler::NodeKind::AnnotationDef,
+          Facet::Compiler::NodeKind::Param,
+          Facet::Compiler::NodeKind::Splat,
+          Facet::Compiler::NodeKind::DoubleSplat,
+          Facet::Compiler::NodeKind::BlockParam,
+          Facet::Compiler::NodeKind::NamedArg,
+        }.includes?(candidate.kind) && span_at_cursor?(candidate.name_span)
+      end || @node
+    end
+
+    def semantic_name_span : Facet::Compiler::Span?
+      candidate = semantic_node
+      return nil unless candidate
+      if candidate.receiver || {Facet::Compiler::NodeKind::Call, Facet::Compiler::NodeKind::CallWithBlock}.includes?(candidate.kind)
+        candidate.callee.try(&.name_span)
+      elsif leaf = @node
+        leaf_span = leaf.name_span
+        leaf_span && span_at_cursor?(leaf_span) ? leaf_span : candidate.name_span
+      else
+        candidate.name_span
+      end
+    end
+
     def enclosing_type_name : String?
       names = [] of String
       context_path.each do |candidate|
@@ -63,6 +115,10 @@ module CRA
           Facet::Compiler::NodeKind::Enum,
         }.includes?(candidate.kind)
       end
+    end
+
+    private def span_at_cursor?(span : Facet::Compiler::Span?) : Bool
+      !!(span && @byte_offset >= span.start && @byte_offset <= span.finish)
     end
   end
 end

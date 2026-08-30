@@ -18,13 +18,14 @@ roles, spans, and symbols.
 | Syntax diagnostics | Cached Facet parse; Crystal diagnostic fallback remains available |
 | UTF-8 byte / LSP UTF-16 conversion | Facet `LineIndex` |
 | Cursor lookup and selection ranges | Facet `SyntaxTree#node_at` / `FacetNodeFinder` |
-| Document symbols | Facet shadow collector; Facet fallback for incomplete buffers |
-| Declaration semantic index | Facet shadow index for types, methods, aliases, includes, inheritance, enum members, docs, and locations |
-| Workspace symbols | Crystal document-symbol index while public-result parity is measured |
+| Document/workspace symbols | Facet collector is authoritative; Crystal collector is empty-result fallback |
+| Declaration semantic index | Facet primary index for types, methods, aliases, includes, inheritance, enum members, docs, and locations; Crystal retains macro fallback data |
 | Completion prefixes, enclosing syntax, keywords | Facet `LineIndex` + `FacetNodeFinder` + named condition roles |
 | Receiver/member and named-argument completion | Facet-first named receiver/call/parameter roles; Crystal fallback for unsupported inference shapes |
 | Locals and scoped variables | Facet local-name collection and typed/constructor assignment inference, including incomplete buffers |
-| Navigation, references, rename, and call graph | Crystal AST consumers being migrated |
+| Navigation, hover, signature help, type hierarchy | Facet-first semantic resolution; Crystal fallback remains |
+| References, rename, document highlights | Facet-first scope-aware occurrence collection; Crystal fallback remains |
+| Call graph and inline values | Temporary Crystal AST consumers |
 | Macro support | Separate cr-analyzer interpreter; Facet expansion is not consumed yet |
 
 Each URI has a stable Facet `FileId`. A document version is parsed once and its
@@ -57,7 +58,7 @@ unrelated macro expansions stay cached.
   parity for types, methods, aliases, includes, inheritance, enum members, docs,
   locations, nested names, and reopen-file invalidation.
 - The reusable `scripts/check_facet_semantic_parity.cr` corpus gate; the current
-  cr-analyzer source/spec corpus is exact on 62/62 Crystal-accepted files, with
+  cr-analyzer source/spec corpus is exact on 65/65 Crystal-accepted files, with
   one additional Facet recovery from a Crystal-rejected file.
 - Tested document-symbol and selection-range behavior on incomplete buffers
   rejected by Crystal::Parser.
@@ -66,17 +67,21 @@ unrelated macro expansions stay cached.
 - Facet-first receiver/member and named-argument completion, including typed and
   constructor-assigned locals, chained generic returns, local names, and
   instance/class variables in buffers rejected by Crystal::Parser.
+- Facet block-call roles and collection yield inference for common Array, Hash,
+  indexed collection, and fluent-call patterns.
+- Facet-first declaration/type/implementation navigation, hover, signature help,
+  references, rename, highlights, document/workspace symbols, and type hierarchy,
+  with regression tests that explicitly remove the Crystal AST.
 
 ## Remaining cutover work
 
-1. Extend Facet inference to block-yield parameter types and remaining literal,
-   call, and control-flow shapes, then retire the completion fallback.
-2. Reuse Facet roles for navigation, references, rename, and call graphs.
-3. Compare shadow semantic and public LSP results on stdlib and representative
+1. Extend Facet inference across the remaining literal, implicit-call, destructure,
+   and control-flow shapes, then retire the completion fallback.
+2. Build incrementally invalidated call-graph and inline-value consumers from
+   Facet rather than rebuilding or retaining Crystal visitors.
+3. Compare Facet-first public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
-4. Make Facet authoritative feature by feature, retaining an explicit rollback
-   switch until each differential gate is clean.
-5. Feed Facet's fully expanded AST into semantic indexing, then remove the
+4. Feed Facet's fully expanded AST into semantic indexing, then remove the
    cr-analyzer macro interpreter and all `compiler/crystal/syntax` requires.
 
 Run the local declaration gate after semantic changes:

@@ -461,6 +461,39 @@ describe CRA::Workspace do
     end
   end
 
+  it "infers Facet block parameter types in a Crystal-rejected buffer" do
+    complete_code = <<-CRYSTAL
+      class Item
+        def ping
+        end
+      end
+
+      def demo
+        items = Array(Item).new
+        items.each do |item|
+          item.pi
+        end
+      end
+    CRYSTAL
+    editing_code = complete_code + "broken(\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "facet_block_parameter.cr")
+      File.write(path, complete_code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(editing_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      index = index_for(editing_code, "item.pi") + "item.pi".size
+      items = workspace.complete(completion_request(uri, position_for(editing_code, index), "."))
+
+      labels(items).should contain("ping")
+    end
+  end
+
   it "completes alias types" do
     code = <<-CRYSTAL
       alias Token = String

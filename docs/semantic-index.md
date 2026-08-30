@@ -1,6 +1,8 @@
 # Semantic Index
 
 SemanticIndex is the core semantic database used for completion and definition.
+The Facet-native producer populates the primary editor index; the temporary
+Crystal producer remains as a fallback for macro expansion and call-graph work.
 
 ## Data model
 
@@ -10,8 +12,11 @@ SemanticIndex is the core semantic database used for completion and definition.
 
 ## Indexing passes
 
-- SkeletonIndexer: builds type shells and records type variables and superclasses.
-- SemanticIndexer: attaches methods, includes, enum members, and aliases.
+- FacetSemanticIndexer skeleton pass: builds type shells and records type variables.
+- FacetSemanticIndexer semantic pass: attaches methods, includes, inheritance,
+  enum members, and aliases.
+- Legacy SkeletonIndexer/SemanticIndexer: retains macro-expanded declarations
+  and call edges until the expansion cutover is complete.
 - Macro pre-expansion: expands supported macros into virtual files for indexing.
 
 ## Type hints

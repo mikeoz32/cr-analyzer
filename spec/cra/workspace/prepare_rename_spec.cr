@@ -26,11 +26,11 @@ end
 private def prepare_rename_request(uri : String, position : CRA::Types::Position) : CRA::Types::PrepareRenameRequest
   payload = {
     jsonrpc: "2.0",
-    id: 1,
-    method: "textDocument/prepareRename",
-    params: {
+    id:      1,
+    method:  "textDocument/prepareRename",
+    params:  {
       textDocument: {uri: uri},
-      position: {line: position.line, character: position.character},
+      position:     {line: position.line, character: position.character},
     },
   }.to_json
 
@@ -96,6 +96,35 @@ describe CRA::Workspace do
       range.not_nil!.start_position.character.should eq(expected.start_position.character)
       range.not_nil!.end_position.line.should eq(expected.end_position.line)
       range.not_nil!.end_position.character.should eq(expected.end_position.character)
+    end
+  end
+
+  it "uses the Facet name span when Crystal rejects the current buffer" do
+    complete_code = <<-CRYSTAL
+      def example(value : Int32)
+        value
+      end
+    CRYSTAL
+    editing_code = complete_code + "broken(\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "facet_prepare_rename.cr")
+      File.write(path, complete_code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(editing_code)
+      document.program.should be_nil
+
+      index = index_for(editing_code, "value", 0)
+      range = workspace.prepare_rename(
+        prepare_rename_request(uri, position_for(editing_code, index + 1))
+      ).not_nil!
+
+      expected = range_for(editing_code, index, "value".size)
+      range_key = "#{range.start_position.line}:#{range.start_position.character}-#{range.end_position.line}:#{range.end_position.character}"
+      expected_key = "#{expected.start_position.line}:#{expected.start_position.character}-#{expected.end_position.line}:#{expected.end_position.character}"
+      range_key.should eq(expected_key)
     end
   end
 end

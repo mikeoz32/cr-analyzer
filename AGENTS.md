@@ -7,13 +7,13 @@ This file is for contributors and automation agents working on this repo.
 cr-analyzer is a lightweight LSP server for Crystal. It builds an editor-oriented
 semantic index without invoking the full compiler. Facet 0.1.5 now provides a
 workspace-owned incremental syntax database, diagnostics, cursor lookup,
-selection ranges, document-symbol shadow/fallback results, and a declaration-level
-semantic shadow index. Facet also owns completion prefix/enclosing-syntax and
-keyword context. Receiver/member and named-argument completion now use Facet
-first, including typed and constructor-assigned locals, generic call returns,
-local names, and instance/class variables. Crystal::Parser still provides the
-fallback for unsupported inference shapes and the AST used by navigation,
-references, rename, call graphs, and remaining semantic features.
+selection ranges, document/workspace symbols, and the primary declaration-level
+semantic index. Facet owns completion syntax and common inference, navigation,
+hover, signature help, references, rename, highlights, and type hierarchy,
+including error-tolerant buffers rejected by Crystal::Parser. The Crystal path
+remains an explicit fallback for macro-generated declarations, unsupported
+inference shapes, call-graph construction, inline values, and remaining semantic
+consumers.
 
 ## Setup
 
@@ -46,7 +46,9 @@ references, rename, call graphs, and remaining semantic features.
 - completion -> FacetNodeFinder for prefixes, enclosing/keyword context,
   receiver/call roles, and local/scoped-variable inference -> CompletionContext
   -> providers; legacy NodeFinder remains a fallback for unsupported shapes.
-- navigation/references/hierarchies -> NodeFinder -> SemanticIndex.
+- navigation/hover/signature/references/rename/type hierarchy -> FacetNodeFinder
+  -> Facet semantic index/occurrence collector; legacy NodeFinder is fallback.
+- call hierarchy edges and inline values -> temporary Crystal AST consumers.
 - diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
 
 ## Semantic Index notes
@@ -57,18 +59,21 @@ references, rename, call graphs, and remaining semantic features.
 
 ## Parser boundary
 
-- `WorkspaceDocument#program` and the remaining semantic consumers use `Crystal::ASTNode`.
+- `WorkspaceDocument#program` is a temporary fallback used by the remaining
+  Crystal semantic consumers; Facet features must continue to work when it is nil.
 - Facet uses stable per-URI file IDs in a workspace-owned `QueryDb`; do not
   reparse Facet locally or discard its `SyntaxTree`.
-- Facet owns diagnostic spans, UTF-16 conversion, selection ranges, and the
-  document-symbol fallback for incomplete buffers.
+- Facet owns diagnostic spans, UTF-16 conversion, selection ranges, and
+  document/workspace symbols.
 - Completion line prefixes, enclosing type names, and keyword context come from
   Facet byte spans and UTF-16 conversion, including incomplete buffers.
 - Completion consumes Facet's named receiver, callee, arguments, named arguments,
   parameter type/default, assignment, and variable roles. Keep Crystal fallback
   explicit until unsupported inference forms have differential coverage.
-- Facet's declaration-level semantic producer runs in shadow mode for types,
-  methods, aliases, includes, inheritance, enum members, docs, and locations.
+- Facet's declaration-level semantic producer is the primary completion and
+  navigation index for types, methods, aliases, includes, inheritance, enum
+  members, docs, and locations. Keep the Crystal index as a measured fallback
+  until macro expansion and call-graph consumers move.
 - `CRA_DISABLE_FACET_DIAGNOSTICS=1` switches diagnostics back to Crystal::Parser.
 - Facet's native AST is intentionally different from Crystal's AST. Extend its
   `SyntaxTree` / `SyntaxNode` query facade instead of emulating Crystal nodes or

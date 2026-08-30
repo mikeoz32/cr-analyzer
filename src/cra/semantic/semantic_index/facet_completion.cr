@@ -2,6 +2,15 @@ module CRA::Psi
   class SemanticIndex
     include FacetTypeRefHelper
 
+    private def facet_semantic_context(context : CRA::CompletionContext) : FacetSemanticContext
+      FacetSemanticContext.new(
+        context.facet_node_path,
+        context.facet_cursor_offset || Int32::MAX,
+        context.enclosing_type_name,
+        context.document_uri
+      )
+    end
+
     private def facet_call_for_context(context : CRA::CompletionContext) : Facet::Compiler::SyntaxNode?
       path = context.facet_node_path
       path.reverse_each.find { |node| node.receiver && node.call_name } ||
@@ -13,8 +22,9 @@ module CRA::Psi
       return nil unless access
       receiver = access.receiver
       return nil unless receiver
-      env = build_facet_type_env(context)
-      resolve_facet_receiver_owner(receiver, context.enclosing_type_name, context, env)
+      semantic_context = facet_semantic_context(context)
+      env = build_facet_type_env(semantic_context)
+      resolve_facet_receiver_owner(receiver, context.enclosing_type_name, semantic_context, env)
     end
 
     private def complete_facet_named_arguments(
@@ -52,6 +62,13 @@ module CRA::Psi
       call : Facet::Compiler::SyntaxNode,
       context : CRA::CompletionContext,
     ) : Array(Method)
+      facet_signature_help_methods(call, facet_semantic_context(context))
+    end
+
+    private def facet_signature_help_methods(
+      call : Facet::Compiler::SyntaxNode,
+      context : FacetSemanticContext,
+    ) : Array(Method)
       name = call.call_name
       return [] of Method unless name
       env = build_facet_type_env(context)
@@ -78,9 +95,9 @@ module CRA::Psi
       find_methods_with_ancestors(owner, name, class_method)
     end
 
-    private def build_facet_type_env(context : CRA::CompletionContext) : TypeEnv
+    private def build_facet_type_env(context : FacetSemanticContext) : TypeEnv
       env = TypeEnv.new
-      cursor = context.facet_cursor_offset || Int32::MAX
+      cursor = context.cursor_offset
       type_node = facet_enclosing_type(context)
       def_node = facet_enclosing_def(context)
 
@@ -132,6 +149,16 @@ module CRA::Psi
 
       if node.kind == Facet::Compiler::NodeKind::Block
         register_facet_parameters(node.parameters, env, collect_locals, false)
+      elsif node.kind == Facet::Compiler::NodeKind::CallWithBlock
+        receiver_type = node.receiver.try { |receiver| infer_facet_type_ref(receiver, context, env) }
+        register_facet_block_parameters(node, receiver_type, env, collect_locals)
+      elsif node.kind == Facet::Compiler::NodeKind::Binary && node.receiver
+        if block_call = node.child(1)
+          if block_call.kind == Facet::Compiler::NodeKind::CallWithBlock
+            receiver_type = node.receiver.try { |receiver| infer_facet_type_ref(receiver, context, env) }
+            register_facet_block_parameters(block_call, receiver_type, env, collect_locals)
+          end
+        end
       elsif {Facet::Compiler::NodeKind::VarDecl, Facet::Compiler::NodeKind::Assign}.includes?(node.kind)
         target = node.target
         if target
@@ -146,14 +173,64 @@ module CRA::Psi
       end
     end
 
+    private def register_facet_block_parameters(
+      call : Facet::Compiler::SyntaxNode,
+      receiver_type : TypeRef?,
+      env : TypeEnv,
+      collect_locals : Bool,
+    ) : Nil
+      return unless collect_locals
+      parameters = call.parameters
+      hints = facet_block_parameter_type_hints(call.call_name, receiver_type, parameters.size)
+      parameters.each_with_index do |parameter, index|
+        name = parameter.name
+        next unless name
+        type_ref = parameter.declared_type.try { |type| type_ref_from_facet(type) }
+        type_ref ||= hints[index]?
+        env.locals[name] = type_ref if type_ref
+      end
+    end
+
+    private def facet_block_parameter_type_hints(
+      method_name : String?,
+      receiver_type : TypeRef?,
+      arity : Int32,
+    ) : Array(TypeRef)
+      return [] of TypeRef unless method_name && receiver_type
+      return [receiver_type] if {"try", "tap", "with", "let", "yield_self"}.includes?(method_name)
+
+      name = receiver_type.name.try(&.lchop("::"))
+      args = receiver_type.args
+      case name
+      when "Array", "Slice", "StaticArray", "Deque", "Set"
+        if element = args.first?
+          return [element] if arity == 1
+          return [element, TypeRef.named("Int32")] if arity == 2
+        end
+      when "Hash"
+        key = args[0]?
+        value = args[1]?
+        if arity == 2
+          return [key || receiver_type, value || receiver_type]
+        elsif arity == 1
+          return [value || receiver_type]
+        end
+      end
+      [] of TypeRef
+    end
+
     private def facet_local_names(context : CRA::CompletionContext) : Set(String)
+      facet_local_names(facet_semantic_context(context))
+    end
+
+    private def facet_local_names(context : FacetSemanticContext) : Set(String)
       names = Set(String).new
       definition = facet_enclosing_def(context)
       return names unless definition
       definition.parameters.each do |parameter|
         parameter.name.try { |name| names << name.lstrip('@') }
       end
-      cursor = context.facet_cursor_offset || Int32::MAX
+      cursor = context.cursor_offset
       definition.body.try { |body| collect_facet_local_names(body, cursor, names) }
       names
     end
@@ -188,7 +265,7 @@ module CRA::Psi
       prefix : String,
       class_variable : Bool,
     ) : Array(CRA::Types::CompletionItem)?
-      type = facet_enclosing_type(context)
+      type = facet_enclosing_type(facet_semantic_context(context))
       return nil unless type && {Facet::Compiler::NodeKind::Class, Facet::Compiler::NodeKind::Struct}.includes?(type.kind)
       names = Set(String).new
       type.body.try { |body| collect_facet_scoped_variable_names(body, class_variable, names) }
@@ -359,7 +436,7 @@ module CRA::Psi
     private def resolve_facet_receiver_owner(
       receiver : Facet::Compiler::SyntaxNode,
       context : String?,
-      completion : CRA::CompletionContext,
+      completion : FacetSemanticContext,
       env : TypeEnv,
     ) : {PsiElement, Bool}?
       if receiver.kind == Facet::Compiler::NodeKind::Ident && receiver.symbol_name == "self"
@@ -396,19 +473,12 @@ module CRA::Psi
       end
     end
 
-    private def facet_enclosing_def(context : CRA::CompletionContext) : Facet::Compiler::SyntaxNode?
-      context.facet_node_path.reverse_each.find { |node| node.kind == Facet::Compiler::NodeKind::Def }
+    private def facet_enclosing_def(context : FacetSemanticContext) : Facet::Compiler::SyntaxNode?
+      context.enclosing_def
     end
 
-    private def facet_enclosing_type(context : CRA::CompletionContext) : Facet::Compiler::SyntaxNode?
-      context.facet_node_path.reverse_each.find do |node|
-        {
-          Facet::Compiler::NodeKind::Class,
-          Facet::Compiler::NodeKind::Module,
-          Facet::Compiler::NodeKind::Struct,
-          Facet::Compiler::NodeKind::Enum,
-        }.includes?(node.kind)
-      end
+    private def facet_enclosing_type(context : FacetSemanticContext) : Facet::Compiler::SyntaxNode?
+      context.enclosing_type
     end
 
     private def facet_class_method?(node : Facet::Compiler::SyntaxNode?) : Bool

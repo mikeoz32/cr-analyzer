@@ -11,6 +11,7 @@ require "./workspace/document"
 require "./workspace/facet_document_store"
 require "./workspace/document_symbols_index"
 require "./workspace/facet_document_symbols_index"
+require "./workspace/facet_symbol_occurrences"
 require "./workspace/keyword_completion_provider"
 require "./workspace/require_path_completion_provider"
 require "./workspace/rename"
@@ -40,6 +41,7 @@ module CRA
       @facet_indexer = FacetDocumentSymbolsIndex.new
       @analyzer = Psi::SemanticIndex.new
       @facet_analyzer = Psi::SemanticIndex.new
+      @completion_providers << @facet_analyzer
       @completion_providers << @analyzer
       @completion_providers << KeywordCompletionProvider.new
       @completion_providers << RequirePathCompletionProvider.new
@@ -120,7 +122,10 @@ module CRA
       content = File.read(file_path)
       uri = "file://#{file_path}"
       @facet_store.register(uri, content, file_path)
-      index_facet_semantics(uri)
+      if syntax = @facet_store.syntax(uri)
+        @facet_indexer.index(uri, syntax)
+        index_facet_semantics(uri, syntax)
+      end
       parser = Crystal::Parser.new(content)
       parser.wants_doc = true
       program = parser.parse
@@ -301,6 +306,9 @@ module CRA
       file = document request.text_document.uri
       position = request.position
       file.try do |doc|
+        facet_definitions = facet_navigation_elements(doc, position, request.text_document.uri, :definition)
+        return elements_to_locations(facet_definitions) unless facet_definitions.empty?
+
         finder = doc.node_context(position)
         node = finder.node
         node.try do |n|
@@ -323,6 +331,9 @@ module CRA
       document = document(request.text_document.uri)
       return [] of Types::Location unless document
 
+      facet_declarations = facet_navigation_elements(document, request.position, request.text_document.uri, :declaration)
+      return elements_to_locations(facet_declarations) unless facet_declarations.empty?
+
       finder = document.node_context(request.position)
       node = finder.node || finder.previous_node
       return [] of Types::Location unless node
@@ -342,6 +353,9 @@ module CRA
     def find_type_definitions(request : Types::TypeDefinitionRequest) : Array(Types::Location)
       document = document(request.text_document.uri)
       return [] of Types::Location unless document
+
+      facet_definitions = facet_navigation_elements(document, request.position, request.text_document.uri, :type_definition)
+      return elements_to_locations(facet_definitions) unless facet_definitions.empty?
 
       finder = document.node_context(request.position)
       node = finder.node || finder.previous_node
@@ -363,6 +377,9 @@ module CRA
       document = document(request.text_document.uri)
       return [] of Types::Location unless document
 
+      facet_implementations = facet_navigation_elements(document, request.position, request.text_document.uri, :implementation)
+      return elements_to_locations(facet_implementations) unless facet_implementations.empty?
+
       finder = document.node_context(request.position)
       node = finder.node || finder.previous_node
       return [] of Types::Location unless node
@@ -383,6 +400,22 @@ module CRA
       document = document(request.text_document.uri)
       return nil unless document
 
+      if facet_finder = document.facet_node_context(request.position)
+        if facet_node = facet_finder.semantic_node
+          definitions = @facet_analyzer.find_facet_definitions(
+            facet_node,
+            facet_finder.context_path,
+            facet_finder.byte_offset,
+            facet_finder.enclosing_type_name,
+            request.text_document.uri
+          )
+          unless definitions.empty?
+            range = facet_range(facet_finder.tree, facet_finder.semantic_name_span || facet_node.span)
+            return Types::Hover.new(hover_contents(definitions), range)
+          end
+        end
+      end
+
       finder = document.node_context(request.position)
       node = finder.node || finder.previous_node
       return nil unless node
@@ -400,9 +433,72 @@ module CRA
       Types::Hover.new(hover_contents(definitions), node.range)
     end
 
+    private def facet_navigation_elements(
+      document : WorkspaceDocument,
+      position : Types::Position,
+      uri : String,
+      operation : Symbol,
+    ) : Array(Psi::PsiElement)
+      finder = document.facet_node_context(position)
+      return [] of Psi::PsiElement unless finder
+      node = finder.semantic_node
+      return [] of Psi::PsiElement unless node
+
+      case operation
+      when :definition
+        @facet_analyzer.find_facet_definitions(
+          node, finder.context_path, finder.byte_offset, finder.enclosing_type_name, uri
+        )
+      when :declaration
+        @facet_analyzer.find_facet_declarations(
+          node, finder.context_path, finder.byte_offset, finder.enclosing_type_name, uri
+        )
+      when :type_definition
+        @facet_analyzer.find_facet_type_definitions(
+          node, finder.context_path, finder.byte_offset, finder.enclosing_type_name, uri
+        )
+      when :implementation
+        @facet_analyzer.find_facet_implementations(
+          node, finder.context_path, finder.byte_offset, finder.enclosing_type_name, uri
+        )
+      else
+        [] of Psi::PsiElement
+      end
+    rescue ex
+      Log.error { "Facet navigation failed: #{ex.message}" }
+      [] of Psi::PsiElement
+    end
+
+    private def facet_range(tree : Facet::Compiler::SyntaxTree, span : Facet::Compiler::Span) : Types::Range
+      start_position = tree.position_at(span.start)
+      end_position = tree.position_at(span.finish)
+      Types::Range.new(
+        Types::Position.new(start_position.line, start_position.character),
+        Types::Position.new(end_position.line, end_position.character)
+      )
+    end
+
     def signature_help(request : Types::SignatureHelpRequest) : Types::SignatureHelp?
       document = document(request.text_document.uri)
       return nil unless document
+
+      if facet_finder = document.facet_node_context(request.position)
+        if facet_call = facet_call_for_signature_help(facet_finder)
+          methods = @facet_analyzer.facet_signature_methods(
+            facet_call,
+            facet_finder.context_path,
+            facet_finder.byte_offset,
+            facet_finder.enclosing_type_name,
+            request.text_document.uri
+          )
+          unless methods.empty?
+            active_signature = active_signature_index(methods, facet_call) || 0
+            active_method = methods[active_signature]? || methods.first
+            active_parameter = active_parameter_index(facet_call, facet_finder.byte_offset, active_method.parameters)
+            return signature_help_response(methods, active_signature, active_parameter)
+          end
+        end
+      end
 
       finder = document.node_context(request.position)
       call = call_for_signature_help(finder)
@@ -443,9 +539,36 @@ module CRA
       Types::SignatureHelp.new(signatures, active_signature, active_parameter)
     end
 
+    private def signature_help_response(
+      methods : Array(Psi::Method),
+      active_signature : Int32,
+      active_parameter : Int32?,
+    ) : Types::SignatureHelp?
+      signatures = [] of Types::SignatureInformation
+      seen = Set(String).new
+      mapped_active = 0
+      methods.each_with_index do |method, index|
+        label = hover_signature(method)
+        next if seen.includes?(label)
+        mapped_active = signatures.size if index == active_signature
+        seen << label
+        parameters = method.parameters.map { |parameter| Types::ParameterInformation.new(JSON::Any.new(parameter)) }
+        signatures << Types::SignatureInformation.new(label, signature_documentation(method), parameters)
+      end
+      return nil if signatures.empty?
+      Types::SignatureHelp.new(signatures, mapped_active, active_parameter)
+    end
+
     def document_highlights(request : Types::DocumentHighlightRequest) : Array(Types::DocumentHighlight)
       document = document(request.text_document.uri)
       return [] of Types::DocumentHighlight unless document
+
+      if locations = facet_reference_locations(document, request.position, request.text_document.uri, true)
+        highlights = locations.select { |location| location.uri == request.text_document.uri }.map do |location|
+          Types::DocumentHighlight.new(location.range)
+        end
+        return highlights unless highlights.empty?
+      end
 
       finder = document.node_context(request.position)
       node = finder.node || finder.previous_node
@@ -484,6 +607,12 @@ module CRA
     def prepare_call_hierarchy(request : Types::CallHierarchyPrepareRequest) : Array(Types::CallHierarchyItem)
       document = document(request.text_document.uri)
       return [] of Types::CallHierarchyItem unless document
+
+      facet_definitions = facet_navigation_elements(document, request.position, request.text_document.uri, :definition)
+      unless facet_definitions.empty?
+        items = facet_definitions.compact_map { |definition| call_hierarchy_item(definition) }
+        return items unless items.empty?
+      end
 
       finder = document.node_context(request.position)
       node = finder.node || finder.previous_node
@@ -542,6 +671,12 @@ module CRA
       document = document(request.text_document.uri)
       return [] of Types::TypeHierarchyItem unless document
 
+      facet_definitions = facet_navigation_elements(document, request.position, request.text_document.uri, :definition)
+      unless facet_definitions.empty?
+        items = facet_definitions.compact_map { |definition| type_hierarchy_item(definition) }
+        return items unless items.empty?
+      end
+
       finder = document.node_context(request.position)
       node = finder.node || finder.previous_node
       return [] of Types::TypeHierarchyItem unless node
@@ -570,7 +705,9 @@ module CRA
 
     def type_hierarchy_supertypes(request : Types::TypeHierarchySupertypesRequest) : Array(Types::TypeHierarchyItem)
       items = [] of Types::TypeHierarchyItem
-      @analyzer.type_hierarchy_supertypes(request.item.name).each do |element|
+      elements = @facet_analyzer.type_hierarchy_supertypes(request.item.name)
+      elements = @analyzer.type_hierarchy_supertypes(request.item.name) if elements.empty?
+      elements.each do |element|
         if item = type_hierarchy_item(element)
           items << item
         end
@@ -580,7 +717,9 @@ module CRA
 
     def type_hierarchy_subtypes(request : Types::TypeHierarchySubtypesRequest) : Array(Types::TypeHierarchyItem)
       items = [] of Types::TypeHierarchyItem
-      @analyzer.type_hierarchy_subtypes(request.item.name).each do |element|
+      elements = @facet_analyzer.type_hierarchy_subtypes(request.item.name)
+      elements = @analyzer.type_hierarchy_subtypes(request.item.name) if elements.empty?
+      elements.each do |element|
         if item = type_hierarchy_item(element)
           items << item
         end
@@ -591,6 +730,15 @@ module CRA
     def find_references(request : Types::ReferencesRequest) : Array(Types::Location)
       document = document(request.text_document.uri)
       return [] of Types::Location unless document
+
+      if locations = facet_reference_locations(
+           document,
+           request.position,
+           request.text_document.uri,
+           request.context.include_declaration
+         )
+        return locations unless locations.empty?
+      end
 
       finder = document.node_context(request.position)
       node = finder.node || finder.previous_node
@@ -640,8 +788,9 @@ module CRA
       results = [] of Types::SymbolInformation
       seen = {} of String => Bool
 
-      @indexer.symbols.each_key do |uri|
-        @indexer.symbol_informations(uri).each do |info|
+      symbol_index = @facet_indexer.symbols.empty? ? @indexer : @facet_indexer
+      symbol_index.symbols.each_key do |uri|
+        symbol_index.symbol_informations(uri).each do |info|
           next unless info.name.includes?(query)
           key = "#{info.name}:#{info.location.uri}:#{info.location.range.start_position.line}:#{info.location.range.start_position.character}"
           next if seen[key]?
@@ -660,8 +809,7 @@ module CRA
       end
       crystal_symbols = @indexer.symbol_informations(uri)
       facet_symbols = @facet_indexer.symbol_informations(uri)
-      return facet_symbols if document && document.program.nil?
-      crystal_symbols.empty? ? facet_symbols : crystal_symbols
+      facet_symbols.empty? ? crystal_symbols : facet_symbols
     end
 
     def publish_diagnostics(uri : String) : Types::PublishDiagnosticsParams
@@ -794,6 +942,20 @@ module CRA
       nil
     end
 
+    private def active_signature_index(
+      methods : Array(Psi::Method),
+      call : Facet::Compiler::SyntaxNode,
+    ) : Int32?
+      arity = call.arguments.size
+      methods.each_with_index do |method, index|
+        next if arity < method.min_arity
+        max = method.max_arity
+        next if max && arity > max
+        return index
+      end
+      nil
+    end
+
     private def call_arity(call : Crystal::Call) : Int32
       call.args.size + (call.named_args.try(&.size) || 0)
     end
@@ -819,6 +981,26 @@ module CRA
 
       index = count_args_before_cursor(call, named_args, cursor)
       return clamp_parameter_index(index, parameters)
+    end
+
+    private def active_parameter_index(
+      call : Facet::Compiler::SyntaxNode,
+      cursor_offset : Int32,
+      parameters : Array(String),
+    ) : Int32?
+      arguments = call.arguments
+      arguments.each_with_index do |argument, index|
+        next unless cursor_offset.in?(argument.span.start..argument.span.finish)
+        if argument.kind == Facet::Compiler::NodeKind::NamedArg
+          if name = argument.name
+            return clamp_parameter_index(parameters.index(name) || index, parameters)
+          end
+        end
+        return clamp_parameter_index(index, parameters)
+      end
+
+      index = arguments.count { |argument| argument.span.finish <= cursor_offset }
+      clamp_parameter_index(index, parameters)
     end
 
     private def clamp_parameter_index(index : Int32, parameters : Array(String)) : Int32?
@@ -861,6 +1043,12 @@ module CRA
         end
       end
       nil
+    end
+
+    private def facet_call_for_signature_help(finder : FacetNodeFinder) : Facet::Compiler::SyntaxNode?
+      path = finder.context_path
+      path.reverse_each.find { |node| node.receiver && node.call_name } ||
+        path.reverse_each.find { |node| node.call_name }
     end
 
     private def cursor_in_call?(call : Crystal::Call, cursor : Crystal::Location) : Bool

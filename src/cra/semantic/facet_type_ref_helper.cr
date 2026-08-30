@@ -1,6 +1,38 @@
 require "facet/compiler"
 require "./ast"
 
+module CRA::Psi
+  struct FacetSemanticContext
+    getter node_path : Array(Facet::Compiler::SyntaxNode)
+    getter cursor_offset : Int32
+    getter enclosing_type_name : String?
+    getter current_file : String?
+
+    def initialize(
+      @node_path : Array(Facet::Compiler::SyntaxNode),
+      @cursor_offset : Int32,
+      @enclosing_type_name : String?,
+      @current_file : String? = nil,
+    )
+    end
+
+    def enclosing_def : Facet::Compiler::SyntaxNode?
+      @node_path.reverse_each.find { |node| node.kind == Facet::Compiler::NodeKind::Def }
+    end
+
+    def enclosing_type : Facet::Compiler::SyntaxNode?
+      @node_path.reverse_each.find do |node|
+        {
+          Facet::Compiler::NodeKind::Class,
+          Facet::Compiler::NodeKind::Module,
+          Facet::Compiler::NodeKind::Struct,
+          Facet::Compiler::NodeKind::Enum,
+        }.includes?(node.kind)
+      end
+    end
+  end
+end
+
 module CRA::Psi::FacetTypeRefHelper
   private def type_ref_from_facet(node : Facet::Compiler::SyntaxNode) : CRA::Psi::TypeRef?
     case node.kind

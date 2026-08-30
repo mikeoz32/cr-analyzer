@@ -20,11 +20,11 @@ end
 private def declaration_request(uri : String, position : CRA::Types::Position) : CRA::Types::DeclarationRequest
   payload = {
     jsonrpc: "2.0",
-    id: 1,
-    method: "textDocument/declaration",
-    params: {
+    id:      1,
+    method:  "textDocument/declaration",
+    params:  {
       textDocument: {uri: uri},
-      position: {line: position.line, character: position.character},
+      position:     {line: position.line, character: position.character},
     },
   }.to_json
 
@@ -34,11 +34,11 @@ end
 private def type_definition_request(uri : String, position : CRA::Types::Position) : CRA::Types::TypeDefinitionRequest
   payload = {
     jsonrpc: "2.0",
-    id: 1,
-    method: "textDocument/typeDefinition",
-    params: {
+    id:      1,
+    method:  "textDocument/typeDefinition",
+    params:  {
       textDocument: {uri: uri},
-      position: {line: position.line, character: position.character},
+      position:     {line: position.line, character: position.character},
     },
   }.to_json
 
@@ -48,11 +48,11 @@ end
 private def implementation_request(uri : String, position : CRA::Types::Position) : CRA::Types::ImplementationRequest
   payload = {
     jsonrpc: "2.0",
-    id: 1,
-    method: "textDocument/implementation",
-    params: {
+    id:      1,
+    method:  "textDocument/implementation",
+    params:  {
       textDocument: {uri: uri},
-      position: {line: position.line, character: position.character},
+      position:     {line: position.line, character: position.character},
     },
   }.to_json
 
@@ -184,6 +184,51 @@ describe CRA::Workspace do
       expected_start = position_for(code, index_for(code, "class Child"))
       start_pos.line.should eq(expected_start.line)
       start_pos.character.should eq(expected_start.character)
+    end
+  end
+
+  it "uses Facet navigation when Crystal rejects the current buffer" do
+    complete_code = <<-CRYSTAL
+      class User
+        def greet
+        end
+      end
+
+      def example
+        user = User.new
+        user.greet
+        user
+      end
+    CRYSTAL
+    editing_code = complete_code + "broken(\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "facet_navigation.cr")
+      File.write(path, complete_code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(editing_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      method_index = index_for(editing_code, "user.greet") + "user.".size + 2
+      declarations = workspace.find_declarations(
+        declaration_request(uri, position_for(editing_code, method_index))
+      )
+      declarations.size.should eq(1)
+      declarations.first.range.start_position.line.should eq(
+        position_for(editing_code, index_for(editing_code, "def greet")).line
+      )
+
+      local_index = index_for(editing_code, "user", 2) + 2
+      type_definitions = workspace.find_type_definitions(
+        type_definition_request(uri, position_for(editing_code, local_index))
+      )
+      type_definitions.size.should eq(1)
+      type_definitions.first.range.start_position.line.should eq(
+        position_for(editing_code, index_for(editing_code, "class User")).line
+      )
     end
   end
 end

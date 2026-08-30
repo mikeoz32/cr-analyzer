@@ -20,11 +20,11 @@ end
 private def signature_help_request(uri : String, position : CRA::Types::Position) : CRA::Types::SignatureHelpRequest
   payload = {
     jsonrpc: "2.0",
-    id: 1,
-    method: "textDocument/signatureHelp",
-    params: {
+    id:      1,
+    method:  "textDocument/signatureHelp",
+    params:  {
       textDocument: {uri: uri},
-      position: {line: position.line, character: position.character},
+      position:     {line: position.line, character: position.character},
     },
   }.to_json
 
@@ -102,6 +102,41 @@ describe CRA::Workspace do
       help = help.not_nil!
       help.active_signature.should eq(1)
       help.signatures[1].label.should contain("greet(name, times)")
+    end
+  end
+
+  it "uses Facet signature help when Crystal rejects the current buffer" do
+    complete_code = <<-CRYSTAL
+      class Greeter
+        def greet(name, times = 1)
+        end
+      end
+
+      def call
+        greeter = Greeter.new
+        greeter.greet("hi", 2)
+      end
+    CRYSTAL
+    editing_code = complete_code + "broken(\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "facet_signature_help.cr")
+      File.write(path, complete_code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(editing_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      index = index_for(editing_code, "greet(\"hi\", 2)")
+      position = position_for(editing_code, index + "greet(\"hi\", ".size)
+      help = workspace.signature_help(signature_help_request(uri, position))
+
+      help.should_not be_nil
+      help = help.not_nil!
+      help.active_parameter.should eq(1)
+      help.signatures.first.label.should contain("Greeter#greet")
     end
   end
 end

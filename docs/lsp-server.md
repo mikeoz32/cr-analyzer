@@ -38,11 +38,11 @@ ServerCapabilities are kept in sync with implemented handlers. Notable gaps: sem
 - Default: Facet 0.1.5 parser diagnostics plus lint-style warnings (TODO/FIXME, empty rescue, trailing whitespace, duplicate require, missing final newline, mixed indentation, unused args/block args).
 - Fallback: Crystal::Parser when Facet diagnostics fail internally or when `CRA_DISABLE_FACET_DIAGNOSTICS=1`.
 - Scope: Facet now provides cached syntax, cursor lookup, selection ranges, and
-  document-symbol fallback, plus a declaration semantic shadow index and
-  completion keyword/enclosing-syntax context. Receiver/member and named-argument
-  completion use Facet first, with Facet local/scoped-variable inference for
-  common forms and incomplete buffers. Unsupported inference shapes, navigation,
-  references, rename, and call graphs remain on the temporary Crystal AST path.
+  document/workspace symbols, plus the primary declaration semantic index.
+  Completion, navigation, hover, signature help, references, rename, highlights,
+  and type hierarchy use Facet first, including tested Crystal-rejected buffers.
+  Macro-generated declarations, unsupported inference, call-graph edges, and
+  inline values still use the temporary Crystal AST path during cutover.
 
 ## Manual testing
 

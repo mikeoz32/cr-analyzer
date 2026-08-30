@@ -30,11 +30,11 @@ end
 private def document_highlight_request(uri : String, position : CRA::Types::Position) : CRA::Types::DocumentHighlightRequest
   payload = {
     jsonrpc: "2.0",
-    id: 1,
-    method: "textDocument/documentHighlight",
-    params: {
+    id:      1,
+    method:  "textDocument/documentHighlight",
+    params:  {
       textDocument: {uri: uri},
-      position: {line: position.line, character: position.character},
+      position:     {line: position.line, character: position.character},
     },
   }.to_json
 
@@ -75,6 +75,35 @@ describe CRA::Workspace do
         range_for(code, index_for(code, "foo", 2), 3),
       ].map { |range| range_key(range) }.sort
       actual.should eq(expected)
+    end
+  end
+
+  it "highlights Facet locals when Crystal rejects the current buffer" do
+    complete_code = <<-CRYSTAL
+      def example
+        foo = 1
+        foo += 2
+        puts foo
+      end
+    CRYSTAL
+    editing_code = complete_code + "broken(\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "facet_highlight.cr")
+      File.write(path, complete_code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(editing_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      index = index_for(editing_code, "foo", 2)
+      highlights = workspace.document_highlights(
+        document_highlight_request(uri, position_for(editing_code, index + 1))
+      )
+
+      highlights.size.should eq(3)
     end
   end
 end

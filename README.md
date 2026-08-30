@@ -45,13 +45,12 @@ Active development. Implemented LSP features include completion (with resolve), 
 - Macro expansion is limited to built-in macros (getter, setter, property, record) and a small interpreter for user-defined macros.
 - Rename is best-effort and currently scoped to workspace files (stdlib is not edited).
 - Facet owns the incremental document store, cached syntax/diagnostics, UTF-16
-  mapping, cursor lookup, selection ranges, and document-symbol fallback for
-  incomplete buffers. A Facet-native declaration semantic index runs in shadow
-  mode. Completion prefixes, enclosing syntax, keyword context, receiver/call
-  roles, local names, instance/class variables, and common best-effort receiver
-  inference are Facet-backed, including Crystal-rejected incomplete buffers.
-  Unsupported inference shapes still fall back to `Crystal::ASTNode`; navigation,
-  references, rename, and call graphs are still being ported.
+  mapping, cursor lookup, selection ranges, symbols, and the primary declaration
+  semantic index. Completion, navigation, hover, signature help, references,
+  rename, highlights, and type hierarchy are Facet-first and work in many
+  Crystal-rejected incomplete buffers. The temporary Crystal AST remains for
+  macro-generated declarations, unsupported inference fallback, call-graph
+  construction, inline values, and remaining cutover work.
 
 ## Usage
 

@@ -10,8 +10,8 @@ This document describes the major runtime pieces and the request flow.
 - `CRA::FacetDocumentStore`: workspace-owned Facet sources and incremental queries.
 - `CRA::WorkspaceDocument`: stores text, cached Facet syntax, temporary Crystal AST, and diagnostics.
 - `CRA::Psi::SemanticIndex`: semantic database for types, methods, vars, aliases, enums; call graph.
-- `CRA::Psi::FacetSemanticIndexer`: Facet-native declaration producer running
-  against a separate shadow `SemanticIndex` during result-parity work.
+- `CRA::Psi::FacetSemanticIndexer`: Facet-native declaration producer backing
+  the primary completion/navigation `SemanticIndex`.
 - Facet 0.1.5 `QueryDb` / `SyntaxTree`: revisioned syntax, diagnostics, cursor,
   document-symbol, and editor-position queries.
 - Completion providers: `SemanticIndex`, `KeywordCompletionProvider`, `RequirePathCompletionProvider`.
@@ -25,9 +25,12 @@ This document describes the major runtime pieces and the request flow.
 4. completion -> FacetNodeFinder for prefixes, enclosing/keyword context,
    receiver/call roles, and local/scoped-variable inference -> CompletionContext
    -> providers; legacy NodeFinder handles unsupported inference shapes.
-5. definition/declaration/implementation/typeDefinition -> legacy NodeFinder -> SemanticIndex.find_definitions.
-6. references -> legacy NodeFinder -> Workspace/SemanticIndex references.
-7. call hierarchy -> SemanticIndex call graph.
+5. definition/declaration/implementation/typeDefinition/hover/signature help ->
+   FacetNodeFinder -> Facet semantic resolution; legacy resolution is fallback.
+6. references/rename/highlights -> Facet symbol occurrence collector; legacy
+   Crystal visitors are fallback.
+7. type hierarchy -> Facet semantic index; call hierarchy edges -> temporary
+   Crystal-built SemanticIndex call graph.
 8. diagnostics -> cached Facet parse + local lints -> publish/pull; Crystal::Parser is the fallback.
 
 ## Indexing and updates
@@ -46,13 +49,12 @@ This document describes the major runtime pieces and the request flow.
 The server currently maintains two syntax paths during cutover:
 
 - Facet owns source revisions, parsing, diagnostics, `SyntaxTree`,
-  `FacetNodeFinder`, selection ranges, document-symbol fallback, and a shadow
-  declaration semantic producer. It also owns completion prefix, enclosing-syntax,
-  keyword-context, receiver/call roles, local names, scoped variables, and common
-  best-effort receiver inference.
+  `FacetNodeFinder`, selection ranges, document/workspace symbols, and the primary
+  declaration semantic producer. It also owns completion syntax and common
+  inference plus navigation, references, rename, highlights, and type hierarchy.
 - Crystal::Parser produces the temporary `Crystal::ASTNode` tree consumed by
-  the remaining completion fallback, navigation, references, rename, call graphs,
-  and other SemanticIndex consumers.
+  macro expansion, unsupported completion inference fallback, call-graph
+  construction, inline values, and remaining SemanticIndex consumers.
 
 Facet's AST remains native and arena-backed; cr-analyzer consumes its stable
 named query API rather than a Crystal AST compatibility layer. The Crystal path

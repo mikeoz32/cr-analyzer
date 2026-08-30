@@ -68,6 +68,52 @@ describe CRA::FacetDocumentStore do
     end
   end
 
+  it "selects semantic names without losing member receivers or parameter roles" do
+    with_tmpdir do |dir|
+      path = File.join(dir, "semantic_cursor.cr")
+      code = <<-CRYSTAL
+        def demo(client : Client)
+          client.fetch
+        end
+      CRYSTAL
+      File.write(path, code)
+      document = workspace_for(dir).document("file://#{path}").not_nil!
+      syntax = document.facet_syntax.not_nil!
+
+      member_offset = code.byte_index("fetch").not_nil! + 2
+      member_position = syntax.position_at(member_offset)
+      member = document.facet_node_context(
+        CRA::Types::Position.new(member_position.line, member_position.character)
+      ).not_nil!.semantic_node.not_nil!
+      member.call_name.should eq("fetch")
+      member.receiver.try(&.symbol_name).should eq("client")
+
+      receiver_offset = code.byte_index("client.fetch").not_nil! + 2
+      receiver_position = syntax.position_at(receiver_offset)
+      receiver = document.facet_node_context(
+        CRA::Types::Position.new(receiver_position.line, receiver_position.character)
+      ).not_nil!.semantic_node.not_nil!
+      receiver.kind.should eq(Facet::Compiler::NodeKind::Ident)
+      receiver.symbol_name.should eq("client")
+
+      parameter_offset = code.byte_index("client :").not_nil! + 2
+      parameter_position = syntax.position_at(parameter_offset)
+      parameter = document.facet_node_context(
+        CRA::Types::Position.new(parameter_position.line, parameter_position.character)
+      ).not_nil!.semantic_node.not_nil!
+      parameter.kind.should eq(Facet::Compiler::NodeKind::Param)
+      parameter.name.should eq("client")
+
+      type_offset = code.byte_index("Client").not_nil! + 2
+      type_position = syntax.position_at(type_offset)
+      type = document.facet_node_context(
+        CRA::Types::Position.new(type_position.line, type_position.character)
+      ).not_nil!.semantic_node.not_nil!
+      type.kind.should eq(Facet::Compiler::NodeKind::Ident)
+      type.symbol_name.should eq("Client")
+    end
+  end
+
   it "reindexes the Facet semantic shadow from the current disk revision" do
     with_tmpdir do |dir|
       path = File.join(dir, "semantic.cr")

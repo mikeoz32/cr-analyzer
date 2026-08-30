@@ -20,11 +20,11 @@ end
 private def hover_request(uri : String, position : CRA::Types::Position) : CRA::Types::HoverRequest
   payload = {
     jsonrpc: "2.0",
-    id: 1,
-    method: "textDocument/hover",
-    params: {
+    id:      1,
+    method:  "textDocument/hover",
+    params:  {
       textDocument: {uri: uri},
-      position: {line: position.line, character: position.character},
+      position:     {line: position.line, character: position.character},
     },
   }.to_json
 
@@ -62,6 +62,40 @@ describe CRA::Workspace do
       contents = hover.not_nil!.contents.as_h
       contents["kind"].as_s.should eq("markdown")
       value = contents["value"].as_s
+      value.should contain("def Greeter#greet(name)")
+      value.should contain("Says hello.")
+    end
+  end
+
+  it "uses Facet hover when Crystal rejects the current buffer" do
+    complete_code = <<-CRYSTAL
+      class Greeter
+        # Says hello.
+        def greet(name)
+        end
+      end
+
+      def call
+        greeter = Greeter.new
+        greeter.greet("hi")
+      end
+    CRYSTAL
+    editing_code = complete_code + "broken(\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "facet_hover.cr")
+      File.write(path, complete_code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(editing_code)
+      document.program.should be_nil
+      workspace.reindex_file(uri, document.program)
+
+      index = index_for(editing_code, "greet(\"hi\")") + 2
+      hover = workspace.hover(hover_request(uri, position_for(editing_code, index))).not_nil!
+      value = hover.contents.as_h["value"].as_s
+
       value.should contain("def Greeter#greet(name)")
       value.should contain("Says hello.")
     end
