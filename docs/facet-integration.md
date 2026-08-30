@@ -92,6 +92,9 @@ editor startup from eagerly expanding the entire toolchain.
   with block content included in incremental expansion cache keys. Evaluated
   collections support lexical map/select/predicate/iteration blocks used by
   declaration-generating macro control flow.
+- Macro strings, symbols, identifiers, and opaque AST arguments retain distinct
+  source rendering and scalar values; direct interpolation, `id`, `stringify`,
+  `symbolize`, and basic AST predicates no longer erase Crystal syntax roles.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.

@@ -65,7 +65,8 @@ unsupported inference shapes, and remaining semantic consumers.
 - Facet expands standard declaration macros and the supported user-macro subset;
   generated declarations are indexed under `facet-macro:` URIs. Unsupported
   AST arguments are preserved as source-backed values; unsupported type-aware
-  expansions remain under `crystal-macro:` URIs.
+  expansions remain under `crystal-macro:` URIs. Preserve the distinction
+  between macro source rendering and scalar values when extending evaluation.
 
 ## Parser boundary
 
