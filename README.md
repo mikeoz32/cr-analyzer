@@ -47,8 +47,9 @@ Active development. Implemented LSP features include completion (with resolve), 
 - Facet owns the incremental document store, cached syntax/diagnostics, UTF-16
   mapping, cursor lookup, selection ranges, and document-symbol fallback for
   incomplete buffers. A Facet-native declaration semantic index runs in shadow
-  mode. Completion, navigation, rename, locals, calls, and inference are still
-  being ported from `Crystal::ASTNode`.
+  mode; completion prefixes, enclosing syntax, and keyword context are Facet-backed.
+  Receiver/member completion, navigation, rename, locals, calls, and inference
+  are still being ported from `Crystal::ASTNode`.
 
 ## Usage
 

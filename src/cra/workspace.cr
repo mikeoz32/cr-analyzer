@@ -241,17 +241,21 @@ module CRA
       return [] of Types::CompletionItem unless document
 
       finder = document.node_context(request.position)
+      facet_finder = document.facet_node_context(request.position)
       context = CompletionContext.new(
         request,
         request.text_document.uri,
         document.text,
         finder.node,
         finder.previous_node,
-        finder.enclosing_type_name,
+        facet_finder.try(&.enclosing_type_name) || finder.enclosing_type_name,
         finder.enclosing_def,
         finder.enclosing_class,
         finder.cursor_location,
         finder.context_path,
+        facet_finder.try(&.node),
+        facet_finder.try(&.context_path) || [] of Facet::Compiler::SyntaxNode,
+        facet_finder.try(&.byte_offset),
         @root
       )
 

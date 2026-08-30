@@ -1,6 +1,7 @@
 require "./types"
 require "uri"
 require "compiler/crystal/syntax"
+require "facet/compiler"
 
 module CRA
   class CompletionContext
@@ -17,6 +18,9 @@ module CRA
     getter line_prefix : String
     getter word_prefix : String
     getter node_path : Array(Crystal::ASTNode)
+    getter facet_node : Facet::Compiler::SyntaxNode?
+    getter facet_node_path : Array(Facet::Compiler::SyntaxNode)
+    getter facet_cursor_offset : Int32?
     getter root : URI
 
     def initialize(
@@ -30,10 +34,12 @@ module CRA
       @enclosing_class : Crystal::ClassDef?,
       @cursor_location : Crystal::Location?,
       @node_path : Array(Crystal::ASTNode),
-      @root : URI
+      @facet_node : Facet::Compiler::SyntaxNode?,
+      @facet_node_path : Array(Facet::Compiler::SyntaxNode),
+      @facet_cursor_offset : Int32?,
+      @root : URI,
     )
-      line = line_at(@document_text, @request.position.line)
-      @line_prefix = line[0, @request.position.character]? || line
+      @line_prefix = line_prefix_at(@document_text, @request.position)
       @word_prefix = word_prefix_from(@line_prefix)
       @trigger_character = @request.context.try(&.trigger_character) || infer_trigger(@line_prefix)
     end
@@ -86,15 +92,16 @@ module CRA
       ""
     end
 
-    private def line_at(text : String, target_line : Int32) : String
-      current_line = 0
-      text.each_line do |line|
-        if current_line == target_line
-          return line.chomp("\n").chomp("\r")
-        end
-        current_line += 1
-      end
-      ""
+    private def line_prefix_at(text : String, position : Types::Position) : String
+      source = Facet::Compiler::Source.new(text, @document_uri)
+      line_index = Facet::Compiler::LineIndex.new(source)
+      return "" unless position.line.in?(0...line_index.line_starts.size)
+      cursor = @facet_cursor_offset || line_index.offset_at(
+        Facet::Compiler::TextPosition.new(position.line, position.character),
+        Facet::Compiler::PositionEncoding::Utf16
+      )
+      line_start = line_index.line_starts[position.line]
+      text.byte_slice(line_start, Math.max(cursor - line_start, 0))
     end
   end
 

@@ -21,7 +21,8 @@ roles, spans, and symbols.
 | Document symbols | Facet shadow collector; Facet fallback for incomplete buffers |
 | Declaration semantic index | Facet shadow index for types, methods, aliases, includes, inheritance, enum members, docs, and locations |
 | Workspace symbols | Crystal document-symbol index while public-result parity is measured |
-| Completion, navigation, references, rename | Crystal AST consumers being migrated |
+| Completion prefixes, enclosing syntax, keywords | Facet `LineIndex` + `FacetNodeFinder` + named condition roles |
+| Receiver/member completion, navigation, references, rename | Crystal AST consumers being migrated |
 | Locals, calls, inference, and call graph | Crystal AST consumers being migrated |
 | Macro support | Separate cr-analyzer interpreter; Facet expansion is not consumed yet |
 
@@ -59,12 +60,13 @@ unrelated macro expansions stay cached.
   one additional Facet recovery from a Crystal-rejected file.
 - Tested document-symbol and selection-range behavior on incomplete buffers
   rejected by Crystal::Parser.
+- Facet-backed completion prefixes, enclosing type context, and keyword-context
+  classification, including incomplete conditions and astral UTF-16 positions.
 
 ## Remaining cutover work
 
-1. Port completion context and keyword-context queries to `FacetNodeFinder`.
-2. Port local/call collectors used by inference, navigation, references, and
-   rename.
+1. Port receiver/call/local roles used by member and named-argument completion.
+2. Reuse those Facet roles for inference, navigation, references, and rename.
 3. Compare shadow semantic and public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
 4. Make Facet authoritative feature by feature, retaining an explicit rollback

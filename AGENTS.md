@@ -8,8 +8,9 @@ cr-analyzer is a lightweight LSP server for Crystal. It builds an editor-oriente
 semantic index without invoking the full compiler. Facet 0.1.5 now provides a
 workspace-owned incremental syntax database, diagnostics, cursor lookup,
 selection ranges, document-symbol shadow/fallback results, and a declaration-level
-semantic shadow index. Crystal::Parser still provides the AST used by the
-remaining navigation and semantic features.
+semantic shadow index. Facet also owns completion prefix/enclosing-syntax and
+keyword context. Crystal::Parser still provides the AST used by the remaining
+receiver, local-inference, navigation, and semantic features.
 
 ## Setup
 
@@ -39,7 +40,8 @@ remaining navigation and semantic features.
 - Initialize -> Workspace.scan -> parse and index workspace, dependencies, and stdlib.
 - didOpen/didChange/didSave -> incremental LSP text edits -> revisioned Facet
   query plus temporary Crystal parse -> reindex the file and dependent types.
-- completion -> NodeFinder -> CompletionContext -> providers.
+- completion -> FacetNodeFinder for prefixes/enclosing/keyword context plus
+  legacy NodeFinder for receiver/local inference -> CompletionContext -> providers.
 - navigation/references/hierarchies -> NodeFinder -> SemanticIndex.
 - diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
 
@@ -56,6 +58,8 @@ remaining navigation and semantic features.
   reparse Facet locally or discard its `SyntaxTree`.
 - Facet owns diagnostic spans, UTF-16 conversion, selection ranges, and the
   document-symbol fallback for incomplete buffers.
+- Completion line prefixes, enclosing type names, and keyword context come from
+  Facet byte spans and UTF-16 conversion, including incomplete buffers.
 - Facet's declaration-level semantic producer runs in shadow mode for types,
   methods, aliases, includes, inheritance, enum members, docs, and locations.
 - `CRA_DISABLE_FACET_DIAGNOSTICS=1` switches diagnostics back to Crystal::Parser.

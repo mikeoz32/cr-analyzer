@@ -68,6 +68,73 @@ module CRA
     end
 
     private def keywords_for_context(context : CompletionContext) : Array(String)
+      unless context.facet_node_path.empty?
+        return facet_keywords_for_context(context)
+      end
+
+      crystal_keywords_for_context(context)
+    end
+
+    private def facet_keywords_for_context(context : CompletionContext) : Array(String)
+      return CONDITION_KEYWORDS if facet_condition_context?(context)
+
+      path = context.facet_node_path
+      keywords = [] of String
+      in_def = path.any? { |node| node.kind == Facet::Compiler::NodeKind::Def }
+      in_type = path.any? do |node|
+        {
+          Facet::Compiler::NodeKind::Class,
+          Facet::Compiler::NodeKind::Module,
+          Facet::Compiler::NodeKind::Struct,
+          Facet::Compiler::NodeKind::Enum,
+          Facet::Compiler::NodeKind::Lib,
+        }.includes?(node.kind)
+      end
+      in_if = path.any? { |node| node.kind == Facet::Compiler::NodeKind::If }
+      in_unless = path.any? { |node| node.kind == Facet::Compiler::NodeKind::Unless }
+      in_case = path.any? { |node| node.kind == Facet::Compiler::NodeKind::Case }
+      in_exception = path.any? do |node|
+        {
+          Facet::Compiler::NodeKind::Begin,
+          Facet::Compiler::NodeKind::Rescue,
+          Facet::Compiler::NodeKind::Ensure,
+        }.includes?(node.kind)
+      end
+      in_loop = path.any? do |node|
+        {
+          Facet::Compiler::NodeKind::While,
+          Facet::Compiler::NodeKind::Until,
+          Facet::Compiler::NodeKind::For,
+        }.includes?(node.kind)
+      end
+
+      if in_def
+        keywords.concat(BODY_KEYWORDS)
+      else
+        keywords.concat(TOP_LEVEL_KEYWORDS)
+        keywords.concat(TYPE_BODY_KEYWORDS) if in_type
+      end
+
+      keywords.concat(LOOP_KEYWORDS) if in_loop
+      keywords.concat(IF_KEYWORDS) if in_if
+      keywords.concat(UNLESS_KEYWORDS) if in_unless
+      keywords.concat(CASE_KEYWORDS) if in_case
+      keywords.concat(BEGIN_KEYWORDS) if in_exception
+      keywords
+    end
+
+    private def facet_condition_context?(context : CompletionContext) : Bool
+      cursor = context.facet_cursor_offset
+      return false unless cursor
+
+      context.facet_node_path.reverse_each do |node|
+        next unless condition = node.condition
+        return condition.span.start <= cursor <= condition.span.finish
+      end
+      false
+    end
+
+    private def crystal_keywords_for_context(context : CompletionContext) : Array(String)
       return CONDITION_KEYWORDS if condition_context?(context)
 
       keywords = [] of String

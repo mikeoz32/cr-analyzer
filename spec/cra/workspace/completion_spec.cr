@@ -26,12 +26,12 @@ def completion_request(uri : String, position : CRA::Types::Position, trigger_ch
 
   payload = {
     jsonrpc: "2.0",
-    id: 1,
-    method: "textDocument/completion",
-    params: {
+    id:      1,
+    method:  "textDocument/completion",
+    params:  {
       textDocument: {uri: uri},
-      position: {line: position.line, character: position.character},
-      context: context,
+      position:     {line: position.line, character: position.character},
+      context:      context,
     },
   }.to_json
 
@@ -256,6 +256,46 @@ describe CRA::Workspace do
 
       labels(items).should contain("true")
       labels(items).should_not contain("begin")
+    end
+  end
+
+  it "uses Facet keyword context when Crystal rejects an incomplete condition" do
+    code = "def demo\n  if tr\nend\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "incomplete_condition.cr")
+      File.write(path, "def demo\nend\n")
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      document = workspace.document(uri).not_nil!
+      document.update(code)
+      document.program.should be_nil
+
+      index = index_for(code, "tr") + "tr".size
+      items = workspace.complete(completion_request(uri, position_for(code, index)))
+
+      labels(items).should contain("true")
+      labels(items).should_not contain("begin")
+    end
+  end
+
+  it "reads completion prefixes at LSP UTF-16 positions" do
+    code = "def demo\n  value = \"😀\"; trailing\nend\n"
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "utf16_completion.cr")
+      File.write(path, code)
+      uri = "file://#{path}"
+      workspace = workspace_for(dir)
+      byte_offset = code.byte_index("trailing").not_nil! + "tr".bytesize
+      position = Facet::Compiler::LineIndex.new(
+        Facet::Compiler::Source.new(code, path)
+      ).position_at(byte_offset)
+      request_position = CRA::Types::Position.new(position.line, position.character)
+
+      items = workspace.complete(completion_request(uri, request_position))
+
+      labels(items).should contain("true")
     end
   end
 
