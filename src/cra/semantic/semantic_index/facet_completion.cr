@@ -399,7 +399,7 @@ module CRA::Psi
         receiver = node.child(0)
         receiver.try do |value|
           receiver_type = infer_facet_type_ref(value, context, env, depth + 1)
-          facet_index_return_type(receiver_type)
+          facet_index_return_type(receiver_type, context)
         end
       else
         nil
@@ -422,7 +422,7 @@ module CRA::Psi
       receiver_type = receiver.try { |value| infer_facet_type_ref(value, context, env, depth + 1) }
       receiver_type ||= TypeRef.named(context) if context
       return nil unless receiver_type
-      return facet_index_return_type(receiver_type) if name == "[]"
+      return facet_index_return_type(receiver_type, context) if name == "[]"
       owner = resolve_type_ref(receiver_type, context)
       return nil unless owner
       class_method = receiver ? facet_type_expression?(receiver, env) : false
@@ -505,8 +505,20 @@ module CRA::Psi
       end
     end
 
-    private def facet_index_return_type(receiver : TypeRef?) : TypeRef?
+    private def facet_index_return_type(receiver : TypeRef?, context : String?) : TypeRef?
       return nil unless receiver
+      if receiver.union?
+        types = [] of TypeRef
+        receiver.union_types.each do |member|
+          if indexed = facet_index_return_type(member, context)
+            types << indexed
+          end
+        end
+        return nil if types.empty?
+        return types.first if types.size == 1
+        return TypeRef.union(types)
+      end
+
       name = receiver.name.to_s.lchop("::")
       case name
       when "Array", "Slice", "StaticArray", "Deque"
@@ -514,7 +526,10 @@ module CRA::Psi
       when "Hash"
         receiver.args[1]?
       else
-        nil
+        owner = resolve_type_ref(receiver, context)
+        return nil unless owner
+        method = find_methods_with_ancestors(owner, "[]", false).find(&.return_type_ref)
+        method.try { |candidate| infer_method_return_type(candidate, receiver) }
       end
     end
 

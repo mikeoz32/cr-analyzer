@@ -8,7 +8,7 @@ This document describes the major runtime pieces and the request flow.
 - `CRA::JsonRPC::Processor`: dispatches requests; owns a `Workspace`.
 - `CRA::Workspace`: manages documents, indexing, completions, definitions, references, diagnostics.
 - `CRA::FacetDocumentStore`: workspace-owned Facet sources and incremental queries.
-- `CRA::WorkspaceDocument`: stores text, cached Facet syntax, temporary Crystal AST, and diagnostics.
+- `CRA::WorkspaceDocument`: stores text, cached Facet syntax, optional temporary Crystal AST, and diagnostics.
 - `CRA::Psi::SemanticIndex`: semantic database for types, methods, vars, aliases, enums; call graph.
 - `CRA::Psi::FacetSemanticIndexer`: Facet-native declaration producer backing
   the primary completion/navigation `SemanticIndex`.
@@ -35,7 +35,8 @@ This document describes the major runtime pieces and the request flow.
    Crystal visitors are fallback.
 7. type hierarchy and inline values -> Facet; call hierarchy -> Facet call-site
    cache and lazy semantic resolution, with legacy edges as a measured fallback.
-8. diagnostics -> cached Facet parse + local lints -> publish/pull; Crystal::Parser is the fallback.
+8. diagnostics -> cached Facet parse + Facet-native local lints -> publish/pull;
+   Crystal::Parser is the explicit fallback outside Facet-only mode.
 
 ## Indexing and updates
 
@@ -55,8 +56,9 @@ This document describes the major runtime pieces and the request flow.
   materialized expansion `QueryDb` keeps this provider set independent from the
   complete syntax database.
 - Crystal::Parser still parses each changed document while semantic consumers
-  are being migrated.
-- Reindexing also reindexes dependent types based on include/extend and superclass relationships.
+  are being migrated, unless `CRA_FACET_ONLY=1` selects the CI cutover lane.
+- Facet include/extend and superclass relationships drive dependent-file
+  invalidation. Legacy relationships remain only for legacy index refreshes.
 - stdlib lookup uses CRYSTAL_PATH or CRYSTAL_HOME, with /usr/share/crystal/src as fallback.
 
 ## Parser boundary
@@ -75,6 +77,11 @@ The server currently maintains two syntax paths during cutover:
 Facet's AST remains native and arena-backed; cr-analyzer consumes its stable
 named query API rather than a Crystal AST compatibility layer. The Crystal path
 will be removed feature by feature after differential result gates pass.
+
+`CRA_FACET_ONLY=1 crystal spec spec/cra/workspace` is the executable boundary:
+the full workspace LSP suite must pass while `WorkspaceDocument#program` stays
+nil. This prevents apparently successful Facet results from silently depending
+on a Crystal parser fallback.
 
 Incrementality is currently file-grained: unchanged files and unchanged text
 reuse query results, while an edited file is lexed and parsed again. Subtree-level

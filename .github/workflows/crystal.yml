@@ -20,5 +20,7 @@ jobs:
       run: shards install
     - name: Run tests
       run: crystal spec
+    - name: Run Facet-only workspace contract
+      run: CRA_FACET_ONLY=1 crystal spec spec/cra/workspace
     - name: Build artifact
       run: crystal build --release

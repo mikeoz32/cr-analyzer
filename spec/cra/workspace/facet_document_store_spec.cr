@@ -17,13 +17,17 @@ describe CRA::FacetDocumentStore do
       first_tree = document.facet_syntax
       first_tree.should_not be_nil
       first_program = document.program
-      first_program.should_not be_nil
+      first_program.nil?.should eq(ENV["CRA_FACET_ONLY"]? == "1")
       executions = store.queries.stats.syntax_executions
 
       document.update(text)
       store.file_id(uri).should eq(file_id)
       document.facet_syntax.not_nil!.same?(first_tree.not_nil!).should be_true
-      document.program.not_nil!.same?(first_program.not_nil!).should be_true
+      if first_program
+        document.program.not_nil!.same?(first_program).should be_true
+      else
+        document.program.should be_nil
+      end
       store.queries.stats.syntax_executions.should eq(executions)
       store.queries.stats.syntax_cache_hits.should be > 0
 
@@ -122,9 +126,7 @@ describe CRA::FacetDocumentStore do
       workspace = workspace_for(dir)
 
       workspace.facet_analyzer.find_class("Before").should_not be_nil
-      workspace.facet_analyzer.type_names_for_file(uri).should eq(
-        workspace.analyzer.type_names_for_file(uri)
-      )
+      workspace.facet_analyzer.type_names_for_file(uri).should eq(["Before"])
 
       File.write(path, "class After\n  def value; 1; end\nend\n")
       workspace.reindex_file(uri).should contain(uri)
@@ -132,9 +134,7 @@ describe CRA::FacetDocumentStore do
       workspace.facet_analyzer.find_class("Before").should be_nil
       workspace.facet_analyzer.find_class("After").should_not be_nil
       workspace.facet_analyzer.find_class("After").not_nil!.methods.map(&.name).should contain("value")
-      workspace.facet_analyzer.type_names_for_file(uri).should eq(
-        workspace.analyzer.type_names_for_file(uri)
-      )
+      workspace.facet_analyzer.type_names_for_file(uri).should eq(["After"])
     end
   end
 
@@ -233,7 +233,7 @@ describe CRA::FacetDocumentStore do
 
       document = workspace.document(macro_uri).not_nil!
       document.update(after_macro)
-      document.program.should_not be_nil
+      document.program.nil?.should eq(ENV["CRA_FACET_ONLY"]? == "1")
       reindexed = workspace.reindex_file(macro_uri, document.program)
 
       reindexed.should contain(use_uri)

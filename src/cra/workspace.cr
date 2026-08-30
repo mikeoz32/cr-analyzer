@@ -132,6 +132,7 @@ module CRA
         index_facet_semantics(uri, syntax)
         @facet_call_graph.index(uri, syntax, @facet_store.revision(uri).not_nil!)
       end
+      return if facet_only?
       parser = Crystal::Parser.new(content)
       parser.wants_doc = true
       program = parser.parse
@@ -153,12 +154,14 @@ module CRA
       content = File.read(path)
       @facet_store.register(uri, content, path)
       program : Crystal::ASTNode? = nil
-      begin
-        parser = Crystal::Parser.new(content)
-        parser.wants_doc = true
-        program = parser.parse
-      rescue ex : Exception
-        Log.error { "Error parsing #{path}: #{ex.message}" }
+      unless facet_only?
+        begin
+          parser = Crystal::Parser.new(content)
+          parser.wants_doc = true
+          program = parser.parse
+        rescue ex : Exception
+          Log.error { "Error parsing #{path}: #{ex.message}" }
+        end
       end
       reindex_current_revision(uri, program)
     rescue ex : Exception
@@ -186,6 +189,7 @@ module CRA
 
     private def reindex_current_revision(uri : String, program : Crystal::ASTNode?) : Array(String)
       reindexed = [] of String
+      old_facet_types = @facet_analyzer.type_names_for_file(uri).dup
 
       if syntax = @facet_store.syntax(uri)
         @facet_indexer.index(uri, syntax)
@@ -194,8 +198,12 @@ module CRA
         index_facet_expansion(uri, syntax)
       end
       reindexed << uri
+      changed_facet_types = (old_facet_types + @facet_analyzer.type_names_for_file(uri)).uniq
+      facet_dependent_types = @facet_analyzer.dependent_types_for(changed_facet_types)
+      reindexed.concat(@facet_analyzer.files_for_types(facet_dependent_types))
       reindexed.concat(reindex_pending_facet_expansions(uri))
-      return reindexed unless program
+      return reindexed.uniq if facet_only?
+      return reindexed.uniq unless program
 
       old_types = @analyzer.type_names_for_file(uri)
 
@@ -241,7 +249,7 @@ module CRA
         reindexed << dep_uri
       end
 
-      reindexed
+      reindexed.uniq
     end
 
     private def index_facet_semantics(uri : String, syntax : Facet::Compiler::SyntaxTree? = nil) : Nil
@@ -303,6 +311,10 @@ module CRA
 
     private def facet_macro_uri(uri : String) : String
       "facet-macro:#{uri.sub("file://", "")}"
+    end
+
+    private def facet_only? : Bool
+      ENV["CRA_FACET_ONLY"]? == "1"
     end
 
     def complete(request : Types::CompletionRequest) : Array(Types::CompletionItem)

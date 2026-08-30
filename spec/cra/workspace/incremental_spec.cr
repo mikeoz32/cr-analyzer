@@ -1,26 +1,28 @@
 require "../../spec_helper"
 require "../../../src/cra/workspace"
 
-class ASTFinder < Crystal::Visitor
-  getter node : Crystal::ASTNode?
-
-  def initialize(&@predicate : Crystal::ASTNode -> Bool)
-  end
-
-  def visit(node : Crystal::ASTNode) : Bool
-    return false if @node
-    if @predicate.call(node)
-      @node = node
-      return false
-    end
-    true
-  end
+private def incremental_position_for(code : String, needle : String) : CRA::Types::Position
+  index = code.index(needle) || raise "needle not found: #{needle}"
+  prefix = code.byte_slice(0, index) || ""
+  line = prefix.count('\n')
+  last_newline = prefix.rindex('\n')
+  column = last_newline ? index - last_newline - 1 : index
+  CRA::Types::Position.new(line, column)
 end
 
-def find_first(node : Crystal::ASTNode, &predicate : Crystal::ASTNode -> Bool) : Crystal::ASTNode?
-  finder = ASTFinder.new(&predicate)
-  node.accept(finder)
-  finder.node
+private def incremental_declaration_request(
+  uri : String,
+  position : CRA::Types::Position,
+) : CRA::Types::DeclarationRequest
+  CRA::Types::Message.from_json({
+    jsonrpc: "2.0",
+    id:      1,
+    method:  "textDocument/declaration",
+    params:  {
+      textDocument: {uri: uri},
+      position:     {line: position.line, character: position.character},
+    },
+  }.to_json).as(CRA::Types::DeclarationRequest)
 end
 
 describe CRA::Workspace do
@@ -36,38 +38,23 @@ describe CRA::Workspace do
         end
       CRYSTAL
 
-      File.write(child_path, <<-CRYSTAL)
+      child_code = <<-CRYSTAL
         class Child < Base
           def call
             greet
           end
         end
       CRYSTAL
+      File.write(child_path, child_code)
 
       ws = workspace_for(dir)
+      child_uri = "file://#{child_path}"
+      position = incremental_position_for(child_code, "greet")
+      request = incremental_declaration_request(child_uri, position)
 
-      child_node = Crystal::Parser.new(File.read(child_path)).parse
-      call_node = find_first(child_node) do |n|
-        n.is_a?(Crystal::Call) && n.name == "greet"
-      end
-      call_node.should_not be_nil
-      call_node = call_node.not_nil!.as(Crystal::Call)
-
-      def_node = find_first(child_node) do |n|
-        n.is_a?(Crystal::Def) && n.name == "call"
-      end
-      def_node.should_not be_nil
-      def_node = def_node.not_nil!.as(Crystal::Def)
-
-      class_node = find_first(child_node) do |n|
-        n.is_a?(Crystal::ClassDef) && n.name.full == "Child"
-      end
-      class_node.should_not be_nil
-      class_node = class_node.not_nil!.as(Crystal::ClassDef)
-
-      defs = ws.analyzer.find_definitions(call_node, "Child", def_node, class_node, call_node.location)
-      defs.size.should eq(1)
-      defs.first.should be_a(CRA::Psi::Method)
+      declarations = ws.find_declarations(request)
+      declarations.size.should eq(1)
+      declarations.first.uri.should eq("file://#{base_path}")
 
       File.write(base_path, <<-CRYSTAL)
         class Base
@@ -75,10 +62,9 @@ describe CRA::Workspace do
       CRYSTAL
 
       reindexed = ws.reindex_file("file://#{base_path}")
-      reindexed.should contain("file://#{child_path}")
+      reindexed.should contain(child_uri)
 
-      defs = ws.analyzer.find_definitions(call_node, "Child", def_node, class_node, call_node.location)
-      defs.size.should eq(0)
+      ws.find_declarations(request).should be_empty
     end
   end
 
@@ -94,7 +80,7 @@ describe CRA::Workspace do
         end
       CRYSTAL
 
-      File.write(child_path, <<-CRYSTAL)
+      child_code = <<-CRYSTAL
         class Child
           include Mixins
 
@@ -103,31 +89,16 @@ describe CRA::Workspace do
           end
         end
       CRYSTAL
+      File.write(child_path, child_code)
 
       ws = workspace_for(dir)
+      child_uri = "file://#{child_path}"
+      position = incremental_position_for(child_code, "greet")
+      request = incremental_declaration_request(child_uri, position)
 
-      child_node = Crystal::Parser.new(File.read(child_path)).parse
-      call_node = find_first(child_node) do |n|
-        n.is_a?(Crystal::Call) && n.name == "greet"
-      end
-      call_node.should_not be_nil
-      call_node = call_node.not_nil!.as(Crystal::Call)
-
-      def_node = find_first(child_node) do |n|
-        n.is_a?(Crystal::Def) && n.name == "call"
-      end
-      def_node.should_not be_nil
-      def_node = def_node.not_nil!.as(Crystal::Def)
-
-      class_node = find_first(child_node) do |n|
-        n.is_a?(Crystal::ClassDef) && n.name.full == "Child"
-      end
-      class_node.should_not be_nil
-      class_node = class_node.not_nil!.as(Crystal::ClassDef)
-
-      defs = ws.analyzer.find_definitions(call_node, "Child", def_node, class_node, call_node.location)
-      defs.size.should eq(1)
-      defs.first.should be_a(CRA::Psi::Method)
+      declarations = ws.find_declarations(request)
+      declarations.size.should eq(1)
+      declarations.first.uri.should eq("file://#{module_path}")
 
       File.write(module_path, <<-CRYSTAL)
         module Mixins
@@ -135,10 +106,9 @@ describe CRA::Workspace do
       CRYSTAL
 
       reindexed = ws.reindex_file("file://#{module_path}")
-      reindexed.should contain("file://#{child_path}")
+      reindexed.should contain(child_uri)
 
-      defs = ws.analyzer.find_definitions(call_node, "Child", def_node, class_node, call_node.location)
-      defs.size.should eq(0)
+      ws.find_declarations(request).should be_empty
     end
   end
 end

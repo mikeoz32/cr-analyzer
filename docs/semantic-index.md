@@ -49,7 +49,10 @@ find_definitions resolves:
 
 ## Dependencies
 
-Include/extend and superclass edges are tracked. When a file changes, dependent types and their files are reindexed.
+Include/extend and superclass edges are tracked by the Facet semantic index.
+When a file changes, its old and new type names invalidate dependent files even
+in `CRA_FACET_ONLY=1` mode. Public navigation tests verify that inherited and
+included methods disappear after their provider declaration is removed.
 
 ## Macro expansion
 

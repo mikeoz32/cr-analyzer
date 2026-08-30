@@ -75,7 +75,9 @@ describe CRA::Workspace do
       workspace = workspace_for(dir)
       uri = "file://#{client_path}"
 
-      workspace.analyzer.find_class("Box").not_nil!.methods.map(&.name).should_not contain("before")
+      if legacy_box = workspace.analyzer.find_class("Box")
+        legacy_box.methods.map(&.name).should_not contain("before")
+      end
       generated = workspace.facet_analyzer.find_class("Box").not_nil!.methods.find { |method| method.name == "before" }.not_nil!
       generated.file.not_nil!.should start_with("facet-macro:")
 

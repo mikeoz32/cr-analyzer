@@ -54,7 +54,8 @@ Active development. Implemented LSP features include completion (with resolve), 
   Supported macro-generated declarations also enter the Facet semantic index
   through incrementally invalidated `facet-macro:` slices. The temporary Crystal
   AST remains for unsupported macro semantics, inference fallback, and remaining
-  cutover work.
+  cutover work. `CRA_FACET_ONLY=1` disables construction of that AST; the complete
+  workspace LSP contract suite runs in this mode in CI.
 
 ## Usage
 
@@ -95,6 +96,7 @@ The server uses CRYSTAL_PATH or CRYSTAL_HOME to locate the stdlib. If unset it f
 ## Development
 
 - Run specs: crystal spec
+- Run the no-Crystal-AST workspace contract: `CRA_FACET_ONLY=1 crystal spec spec/cra/workspace`
 - Quick client harness: uv run main.py (uses the Python env in pyproject.toml)
 - Debug: CRA_DUMP_ROOTS=1 to dump index roots after initial scan
 

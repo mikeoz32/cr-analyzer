@@ -76,9 +76,11 @@ module CRA
         # itself encounters an unexpected internal error.
       end
       begin
-        parser = Crystal::Parser.new(text)
-        parser.wants_doc = true
-        @program = parser.parse
+        unless facet_only?
+          parser = Crystal::Parser.new(text)
+          parser.wants_doc = true
+          @program = parser.parse
+        end
       rescue ex : Crystal::SyntaxException
         @last_parse_error = ex
       rescue
@@ -86,6 +88,10 @@ module CRA
       ensure
         parse_diagnostics(text)
       end
+    end
+
+    private def facet_only? : Bool
+      ENV["CRA_FACET_ONLY"]? == "1"
     end
 
     private def apply_range_change(range : Types::Range, new_text : String)
@@ -253,11 +259,100 @@ module CRA
     end
 
     private def add_unused_arg_warnings
+      if syntax = @facet_syntax
+        add_facet_unused_arg_warnings(syntax)
+        return
+      end
+
       return unless program = @program
       collector = UnusedArgCollector.new(@diagnostics)
       program.accept(collector)
       block_collector = UnusedBlockArgCollector.new(@diagnostics)
       program.accept(block_collector)
+    end
+
+    private def add_facet_unused_arg_warnings(syntax : Facet::Compiler::SyntaxTree) : Nil
+      syntax.nodes(Facet::Compiler::NodeKind::Def).each do |definition|
+        add_facet_unused_parameters(syntax, definition, "argument")
+      end
+      syntax.nodes(Facet::Compiler::NodeKind::Fun).each do |definition|
+        add_facet_unused_parameters(syntax, definition, "argument")
+      end
+      syntax.reachable_nodes.each do |block|
+        next unless {
+                      Facet::Compiler::NodeKind::Block,
+                      Facet::Compiler::NodeKind::CallWithBlock,
+                    }.includes?(block.kind)
+        add_facet_unused_parameters(syntax, block, "block argument")
+      end
+    end
+
+    private def add_facet_unused_parameters(
+      syntax : Facet::Compiler::SyntaxTree,
+      scope : Facet::Compiler::SyntaxNode,
+      label : String,
+    ) : Nil
+      body = scope.body
+      return unless body
+
+      scope.parameters.each do |parameter|
+        next if parameter.kind == Facet::Compiler::NodeKind::BlockParam
+        raw_name = parameter.name
+        next unless raw_name
+        # `@value` parameters initialize an instance variable as part of the
+        # declaration, even when the method body is empty.
+        next if raw_name.starts_with?('@')
+        name = raw_name.lstrip('@')
+        next if name.empty? || name.starts_with?('_')
+        next if facet_local_used?(body, name)
+        add_facet_unused_parameter(syntax, parameter, name, label)
+      end
+    end
+
+    private def facet_local_used?(node : Facet::Compiler::SyntaxNode, name : String) : Bool
+      return false if {
+                        Facet::Compiler::NodeKind::Def,
+                        Facet::Compiler::NodeKind::Fun,
+                        Facet::Compiler::NodeKind::MacroDef,
+                        Facet::Compiler::NodeKind::Class,
+                        Facet::Compiler::NodeKind::Module,
+                        Facet::Compiler::NodeKind::Struct,
+                        Facet::Compiler::NodeKind::Enum,
+                        Facet::Compiler::NodeKind::Lib,
+                      }.includes?(node.kind)
+
+      if {
+           Facet::Compiler::NodeKind::Block,
+           Facet::Compiler::NodeKind::CallWithBlock,
+         }.includes?(node.kind) && node.parameters.any? { |parameter| parameter.name.try(&.lstrip('@')) == name }
+        if node.kind == Facet::Compiler::NodeKind::CallWithBlock
+          return node.child(0).try { |call| facet_local_used?(call, name) } || false
+        end
+        return false
+      end
+
+      return true if node.kind == Facet::Compiler::NodeKind::Ident && node.symbol_name == name
+      node.children.any? { |child| facet_local_used?(child, name) }
+    end
+
+    private def add_facet_unused_parameter(
+      syntax : Facet::Compiler::SyntaxTree,
+      parameter : Facet::Compiler::SyntaxNode,
+      name : String,
+      label : String,
+    ) : Nil
+      span = parameter.name_span || parameter.span
+      start_location = syntax.position_at(span.start)
+      end_location = syntax.position_at(span.finish)
+      @diagnostics << Types::Diagnostic.new(
+        range: Types::Range.new(
+          Types::Position.new(line: start_location.line, character: start_location.character),
+          Types::Position.new(line: end_location.line, character: end_location.character)
+        ),
+        severity: Types::DiagnosticSeverity::Hint,
+        message: "Unused #{label} '#{name}'",
+        source: "lint"
+      )
     end
 
     # Collect unused def args (ignores names starting with underscore).

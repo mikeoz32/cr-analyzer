@@ -21,6 +21,7 @@ unsupported inference shapes, and remaining semantic consumers.
 - Run: crystal run src/bin/cra.cr
 - Build: shards build (binary at bin/cr-analyzer)
 - Tests: crystal spec
+- Facet-only workspace contract: CRA_FACET_ONLY=1 crystal spec spec/cra/workspace
 - End-to-end LSP test: uv run pytest
 - Facet semantic parity: crystal run scripts/check_facet_semantic_parity.cr
 - Manual client: uv run main.py (uses the Python env in pyproject.toml)
@@ -41,7 +42,8 @@ unsupported inference shapes, and remaining semantic consumers.
 
 - Initialize -> Workspace.scan -> parse and index workspace, dependencies, and stdlib.
 - didOpen/didChange/didSave -> incremental LSP text edits -> revisioned Facet
-  query plus temporary Crystal parse -> reindex the file and dependent types.
+  query plus optional temporary Crystal parse -> reindex the file and dependent
+  types from Facet include/superclass edges.
 - completion -> FacetNodeFinder for prefixes, enclosing/keyword context,
   receiver/call roles, and local/scoped-variable inference -> CompletionContext
   -> providers; legacy NodeFinder remains a fallback for unsupported shapes.
@@ -91,6 +93,9 @@ unsupported inference shapes, and remaining semantic consumers.
   revision changes; an authoritative empty Facet result must not fall back to a
   stale Crystal edge.
 - `CRA_DISABLE_FACET_DIAGNOSTICS=1` switches diagnostics back to Crystal::Parser.
+- `CRA_FACET_ONLY=1` disables Crystal AST construction. Keep the complete
+  `spec/cra/workspace` suite green in this mode; do not weaken an empty Facet
+  result into an implicit legacy fallback.
 - Facet's native AST is intentionally different from Crystal's AST. Extend its
   `SyntaxTree` / `SyntaxNode` query facade instead of emulating Crystal nodes or
   depending on raw child positions in cr-analyzer.
@@ -103,6 +108,7 @@ unsupported inference shapes, and remaining semantic consumers.
 - CRA_DUMP_ROOTS=1 logs index roots on scan.
 - CRA_SKIP_STDLIB_SCAN=1 skips stdlib indexing for focused tests/debugging.
 - CRA_DISABLE_FACET_DIAGNOSTICS=1 disables Facet diagnostics.
+- CRA_FACET_ONLY=1 disables Crystal parsing for the workspace contract lane.
 
 ## LSP status
 

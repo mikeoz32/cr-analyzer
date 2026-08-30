@@ -33,7 +33,7 @@ describe CRA::Workspace do
 end
 
 describe CRA::Workspace do
-  it "uses crystal parser fallback diagnostics when facet is disabled" do
+  it "uses crystal parser fallback diagnostics only when the parser is available" do
     with_tmpdir do |dir|
       code = <<-CR
       class Foo
@@ -57,8 +57,12 @@ describe CRA::Workspace do
         report = ws.document_diagnostics(request)
         report.should be_a(CRA::Types::DocumentDiagnosticReportFull)
         report = report.as(CRA::Types::DocumentDiagnosticReportFull)
-        report.items.size.should be > 0
-        report.items.first.source.should eq("crystal-parser")
+        if ENV["CRA_FACET_ONLY"]? == "1"
+          report.items.none? { |diagnostic| diagnostic.source == "crystal-parser" }.should be_true
+        else
+          report.items.size.should be > 0
+          report.items.first.source.should eq("crystal-parser")
+        end
       ensure
         ENV.delete("CRA_DISABLE_FACET_DIAGNOSTICS")
       end
@@ -235,6 +239,40 @@ describe CRA::Workspace do
       params = ws.publish_diagnostics("file://#{path}")
       params.diagnostics.any? { |d| d.message.includes?("Unused block argument 'y'") }.should be_true
       params.diagnostics.any? { |d| d.message.includes?("Unused block argument 'x'") }.should be_false
+    end
+  end
+
+  it "does not report auto-assigned instance variable parameters as unused" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      class Box
+        def initialize(@value : Int32)
+        end
+      end
+      CR
+      path = File.join(dir, "ivar_arg.cr")
+      File.write(path, code)
+      params = workspace_for(dir).publish_diagnostics("file://#{path}")
+
+      params.diagnostics.any? { |d| d.message.includes?("Unused argument 'value'") }.should be_false
+    end
+  end
+
+  it "keeps nested parameter shadowing separate for unused diagnostics" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      def visit(value)
+        [1].each do |value|
+          value
+        end
+      end
+      CR
+      path = File.join(dir, "shadowed_arg.cr")
+      File.write(path, code)
+      params = workspace_for(dir).publish_diagnostics("file://#{path}")
+
+      params.diagnostics.any? { |d| d.message.includes?("Unused argument 'value'") }.should be_true
+      params.diagnostics.any? { |d| d.message.includes?("Unused block argument 'value'") }.should be_false
     end
   end
 end

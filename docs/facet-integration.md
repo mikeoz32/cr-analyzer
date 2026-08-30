@@ -28,6 +28,7 @@ roles, spans, and symbols.
 | Inline values | Facet syntax plus semantic local classification |
 | Call graph | Facet per-file call-site cache plus lazy revision-cached semantic resolution; Crystal fallback for legacy items |
 | Macro support | Facet `QueryDb#expand` plus generated-declaration delta is primary for standard declaration macros and supported user macros; Crystal interpreter is fallback for unsupported type-aware APIs |
+| Facet-only validation | `CRA_FACET_ONLY=1` disables Crystal AST construction; all workspace LSP specs run against Facet alone in CI |
 
 Each URI has a stable Facet `FileId`. A document version is parsed once and its
 `AstFile`, `SyntaxTree`, diagnostics, parent map, and line index are reused by
@@ -88,6 +89,14 @@ editor startup from eagerly expanding the entire toolchain.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.
+- The complete workspace LSP contract runs with no Crystal AST: 95/95 examples
+  cover completion, navigation, diagnostics/lints, symbols, references, rename,
+  inline values, call/type hierarchy, macro-generated declarations, and
+  dependent reindexing.
+- Facet infers generic return substitution for user-defined index operators and
+  owns unused method/block argument diagnostics.
+- Facet include/superclass dependencies drive incremental invalidation and are
+  verified through public declaration results before and after provider edits.
 
 ## Remaining cutover work
 
@@ -106,6 +115,12 @@ Run the local declaration gate after semantic changes:
 
 ```console
 crystal run scripts/check_facet_semantic_parity.cr
+```
+
+Run the LSP cutover gate without constructing any Crystal AST:
+
+```console
+CRA_FACET_ONLY=1 crystal spec spec/cra/workspace
 ```
 
 ## Ownership
