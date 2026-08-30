@@ -168,6 +168,45 @@ describe CRA::Workspace do
     end
   end
 
+  it "indexes declarations generated through Facet collection macro blocks" do
+    code = <<-CRYSTAL
+      macro define_selected(names)
+        {% for name in names.select { |candidate| candidate.starts_with?("f") } %}
+          def {{name.id}}
+          end
+        {% end %}
+      end
+
+      class Box
+        define_selected [:first, :second, :final]
+      end
+
+      def call(box : Box)
+        box.f
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "macro_collection_block.cr")
+      File.write(path, code)
+      workspace = workspace_for(dir)
+      uri = "file://#{path}"
+      index = index_for(code, "box.f") + "box.f".size
+
+      items = workspace.complete(completion_request(uri, position_for(code, index), "."))
+      item_labels = labels(items)
+
+      item_labels.should contain("first")
+      item_labels.should contain("final")
+      item_labels.should_not contain("second")
+      generated = workspace.facet_analyzer.find_class("Box").not_nil!.methods.select do |method|
+        {"first", "final"}.includes?(method.name)
+      end
+      generated.size.should eq(2)
+      generated.each { |method| method.file.not_nil!.should start_with("facet-macro:") }
+    end
+  end
+
   it "completes instance methods on typed locals" do
     code = <<-CRYSTAL
       class Greeter

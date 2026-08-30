@@ -54,7 +54,8 @@ unsupported inference shapes, and remaining semantic consumers.
 - macro expansion -> Facet `QueryDb#expand` -> generated-declaration delta under
   `facet-macro:` URIs -> primary Facet semantic index; the legacy interpreter
   covers unsupported type-aware macro APIs during cutover. Supported user macro
-  blocks preserve caller AST through `yield`, `block.body`, and `block.args`.
+  blocks preserve caller AST through `yield`, `block.body`, and `block.args`;
+  collection macro blocks keep their own parameters and propagate outer values.
 - diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
 
 ## Semantic Index notes

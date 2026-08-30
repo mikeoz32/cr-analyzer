@@ -89,11 +89,13 @@ editor startup from eagerly expanding the entire toolchain.
   Macro arguments outside the evaluator subset remain source-backed AST values,
   so generic types and nested expressions survive generated declarations.
   Source-backed macro blocks support `yield`, `block.body`, and `block.args`,
-  with block content included in incremental expansion cache keys.
+  with block content included in incremental expansion cache keys. Evaluated
+  collections support lexical map/select/predicate/iteration blocks used by
+  declaration-generating macro control flow.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.
-- The complete workspace LSP contract runs with no Crystal AST: 97/97 examples
+- The complete workspace LSP contract runs with no Crystal AST: 98/98 examples
   cover completion, navigation, diagnostics/lints, symbols, references, rename,
   inline values, call/type hierarchy, macro-generated declarations, and
   dependent reindexing.
