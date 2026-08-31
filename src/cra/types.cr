@@ -3,6 +3,20 @@ require "./nested_json"
 
 module CRA
   module Types
+    # LSP integer enums must stay integers on the wire. Crystal serializes enums
+    # by name unless the type overrides the default JSON strategy.
+    macro lsp_numeric_enum(type)
+      enum {{type}}
+        def to_json(json : JSON::Builder) : Nil
+          json.number(value)
+        end
+
+        def self.new(pull : JSON::PullParser) : self
+          from_value?(pull.read_int.to_i32) || pull.raise "Unknown #{self} value: #{pull.int_value}"
+        end
+      end
+    end
+
     alias IntegerOrString = Int32 | String
     alias ProgressToken = IntegerOrString
     alias DocumentUri = String
@@ -3358,5 +3372,24 @@ module CRA
         @method = "workspace/didChangeWatchedFiles"
       end
     end
+
+    lsp_numeric_enum CompletionTriggerKind
+    lsp_numeric_enum MessageType
+    lsp_numeric_enum DiagnosticSeverity
+    lsp_numeric_enum DiagnosticTag
+    lsp_numeric_enum TextDocumentSyncKind
+    lsp_numeric_enum CodeActionTriggerKind
+    lsp_numeric_enum CodeActionTag
+    lsp_numeric_enum CompletionItemKind
+    lsp_numeric_enum InsertTextFormat
+    lsp_numeric_enum InsertTextMode
+    lsp_numeric_enum CompletionItemTag
+    lsp_numeric_enum ApplyKind
+    lsp_numeric_enum SymbolKind
+    lsp_numeric_enum SymbolTag
+    lsp_numeric_enum DocumentHighlightKind
+    lsp_numeric_enum InlayHintKind
+    lsp_numeric_enum InlineCompletionTriggerKind
+    lsp_numeric_enum FileChangeType
   end
 end

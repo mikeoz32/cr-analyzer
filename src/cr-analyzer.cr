@@ -11,7 +11,6 @@ module CRA
   module JsonRPC
     class Processor
       @workspace : Workspace? = nil
-      @client_capabilities : Types::ClientCapabilities? = nil
 
       def initialize(@server : Server)
       end
@@ -340,10 +339,8 @@ module CRA
             Log.error { "Error parsing #{uri}: #{ex.message}" }
           end
           ws.reindex_file(uri, program)
-          if should_push_diagnostics?
-            ws_diag = ws.publish_diagnostics(uri)
-            @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
-          end
+          ws_diag = ws.publish_diagnostics(uri)
+          @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
         end
         nil
       end
@@ -362,10 +359,8 @@ module CRA
             return nil
           end
           ws.reindex_file(uri, program)
-          if should_push_diagnostics?
-            ws_diag = ws.publish_diagnostics(uri)
-            @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
-          end
+          ws_diag = ws.publish_diagnostics(uri)
+          @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
         end
         nil
       end
@@ -387,10 +382,8 @@ module CRA
           else
             ws.reindex_file(uri)
           end
-          if should_push_diagnostics?
-            ws_diag = ws.publish_diagnostics(uri)
-            @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
-          end
+          ws_diag = ws.publish_diagnostics(uri)
+          @server.send(Types::PublishDiagnosticsNotification.new(ws_diag))
         end
         nil
       end
@@ -402,7 +395,6 @@ module CRA
 
       def handle(request : Types::InitializeRequest)
         Log.error { "Handling initialize request" }
-        @client_capabilities = request.capabilities
         request.root_uri.try do |uri|
           @workspace = Workspace.from_s(uri)
           @workspace.try &.scan
@@ -441,19 +433,6 @@ module CRA
       rescue ex
         Log.error { "Error handling request: #{ex.message}" }
         nil
-      end
-
-      private def should_push_diagnostics? : Bool
-        diag_cap = @client_capabilities.try(&.text_document).try(&.diagnostic)
-        # If the client advertises diagnostic pull support, avoid push to prevent duplicates.
-        case diag_cap
-        when Bool
-          !diag_cap
-        when Types::DiagnosticClientCapabilities
-          false
-        else
-          true
-        end
       end
     end
 

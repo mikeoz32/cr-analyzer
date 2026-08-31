@@ -7,7 +7,10 @@ from lsprotocol.types import (
     ClientCapabilities,
     InitializeParams,
     CompletionClientCapabilities,
+    DiagnosticClientCapabilities,
+    PublishDiagnosticsParams,
     TextDocumentClientCapabilities,
+    TEXT_DOCUMENT_PUBLISH_DIAGNOSTICS,
 )
 from pygls.lsp.client import LanguageClient
 
@@ -16,22 +19,33 @@ SERVER_ENTRYPOINT = PROJECT_ROOT / "src" / "bin" / "cra.cr"
 
 
 def _server_env() -> dict[str, str]:
-    return dict(os.environ)
+    env = dict(os.environ)
+    env["CRA_SKIP_STDLIB_SCAN"] = "1"
+    return env
 
 
 @pytest_asyncio.fixture(scope="function")
 async def lsp_client():
     print("[fixture] starting server")
     client = LanguageClient("cr-analyzer", "v0")
-    await client.start_io(
-        "crystal",
-        "run",
-        "-Dpreview_mt",
-        "-Dexecution_context",
-        str(SERVER_ENTRYPOINT),
-        env=_server_env(),
-        cwd=str(PROJECT_ROOT),
-    )
+    diagnostics = asyncio.Queue[PublishDiagnosticsParams]()
+
+    @client.feature(TEXT_DOCUMENT_PUBLISH_DIAGNOSTICS)
+    def on_publish_diagnostics(params: PublishDiagnosticsParams):
+        diagnostics.put_nowait(params)
+
+    client.published_diagnostics = diagnostics
+    if server_binary := os.environ.get("CRA_LSP_TEST_BINARY"):
+        server_command = [server_binary]
+    else:
+        server_command = [
+            "crystal",
+            "run",
+            "-Dpreview_mt",
+            "-Dexecution_context",
+            str(SERVER_ENTRYPOINT),
+        ]
+    await client.start_io(*server_command, env=_server_env(), cwd=str(PROJECT_ROOT))
     server = getattr(client, "_server", None)
 
     stderr_task = None
@@ -52,7 +66,8 @@ async def lsp_client():
             params=InitializeParams(
                 capabilities=ClientCapabilities(
                     text_document=TextDocumentClientCapabilities(
-                        completion=CompletionClientCapabilities()
+                        completion=CompletionClientCapabilities(),
+                        diagnostic=DiagnosticClientCapabilities(),
                     )
                 ),
                 root_uri=f"file://{PROJECT_ROOT}",

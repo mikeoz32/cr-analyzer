@@ -32,6 +32,32 @@ describe CRA::Workspace do
   end
 end
 
+describe "diagnostic LSP serialization" do
+  it "encodes severity numerically for push and pull clients" do
+    position = CRA::Types::Position.new(line: 0, character: 0)
+    diagnostic = CRA::Types::Diagnostic.new(
+      range: CRA::Types::Range.new(position, position),
+      severity: CRA::Types::DiagnosticSeverity::Error,
+      message: "broken",
+      source: "facet"
+    )
+
+    pushed = CRA::Types::PublishDiagnosticsNotification.new(
+      CRA::Types::PublishDiagnosticsParams.new(
+        uri: "file:///tmp/broken.cr",
+        diagnostics: [diagnostic]
+      )
+    )
+    push_json = JSON.parse(pushed.to_json)
+    push_json["params"]["diagnostics"][0]["severity"].as_i.should eq(1)
+
+    pulled = CRA::Types::DocumentDiagnosticReportFull.new([diagnostic])
+    pull_json = JSON.parse(pulled.to_json)
+    pull_json["items"][0]["severity"].as_i.should eq(1)
+    CRA::Types::DiagnosticSeverity.from_json("1").should eq(CRA::Types::DiagnosticSeverity::Error)
+  end
+end
+
 describe CRA::Workspace do
   it "uses crystal parser fallback diagnostics only when the parser is available" do
     with_tmpdir do |dir|
