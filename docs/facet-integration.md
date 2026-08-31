@@ -112,10 +112,11 @@ current architecture, not a fixed CI threshold.
   checks. Types, methods, instance variables, and arguments also expose
   annotations with positional and named values. Declaration and annotation
   edits invalidate and requeue materialized type-aware expansion consumers.
-- Facet's committed Crystal 1.21 macro corpus matches exact output for all
-  371 self-contained upstream evaluator contracts. The fixture separately
-  inventories 602 contextual evaluator assertions and 133 semantic examples,
-  so the remaining compiler-dependent surface is not counted as passing.
+- Facet's committed Crystal 1.21 runtime macro corpus captures all 1,017
+  contracts executed by the official evaluator specs and matches exact output
+  for 506/900 portable contracts, including all 371 self-contained contracts.
+  The remaining 394 portable mismatches, 117 program-context contracts, and 133
+  semantic examples remain explicit and are not counted as passing.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.

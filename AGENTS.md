@@ -13,9 +13,11 @@ hover, signature help, references, rename, highlights, and type hierarchy,
 including error-tolerant buffers rejected by Crystal::Parser. Facet also owns
 the first type-aware macro slice (`@type`, type resolution, members, constants,
 explicit ancestry, and annotation metadata). Facet's committed Crystal 1.21
-macro corpus gates all 371 self-contained upstream evaluator contracts. The
-Crystal path remains an explicit fallback for contextual compiler/type macro
-APIs, unsupported inference shapes, and semantic consumers.
+runtime corpus gates 506/900 portable contracts executed by the official
+evaluator specs, including all 371 self-contained contracts, and separately
+tracks 117 program-context contracts. The Crystal path remains an explicit
+fallback for contextual compiler/type macro APIs, unsupported inference shapes,
+and semantic consumers.
 
 ## Setup
 
@@ -28,6 +30,7 @@ APIs, unsupported inference shapes, and semantic consumers.
 - End-to-end LSP test: uv run pytest
 - Facet semantic parity: crystal run scripts/check_facet_semantic_parity.cr
 - Facet upstream macro parity: `(cd ../facet && crystal run scripts/check_upstream_macro_parity.cr)`
+- Facet executed macro parity: `(cd ../facet && crystal run scripts/check_upstream_macro_runtime_parity.cr)`
 - Initialize benchmark: python3 scripts/bench_lsp_initialize.py
 - Manual client: uv run main.py (uses the Python env in pyproject.toml)
 
