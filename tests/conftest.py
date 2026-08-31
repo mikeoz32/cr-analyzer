@@ -102,10 +102,13 @@ async def lsp_client():
             if server.returncode is None:
                 server.terminate()
                 try:
-                    await asyncio.wait_for(server.wait(), timeout=5)
+                    await asyncio.wait_for(asyncio.shield(server.wait()), timeout=5)
                 except asyncio.TimeoutError:
                     print("[fixture] server wait timed out; killing")
-                    server.kill()
+                    try:
+                        server.kill()
+                    except ProcessLookupError:
+                        pass
                     await server.wait()
 
             if server.returncode and server.stderr:
