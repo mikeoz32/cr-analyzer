@@ -12,8 +12,10 @@ semantic index. Facet owns completion syntax and common inference, navigation,
 hover, signature help, references, rename, highlights, and type hierarchy,
 including error-tolerant buffers rejected by Crystal::Parser. Facet also owns
 the first type-aware macro slice (`@type`, type resolution, members, constants,
-and explicit ancestry). The Crystal path remains an explicit fallback for the
-remaining macro APIs, unsupported inference shapes, and semantic consumers.
+explicit ancestry, and annotation metadata). Facet's committed Crystal 1.21
+macro corpus gates all 371 self-contained upstream evaluator contracts. The
+Crystal path remains an explicit fallback for contextual compiler/type macro
+APIs, unsupported inference shapes, and semantic consumers.
 
 ## Setup
 
@@ -25,6 +27,7 @@ remaining macro APIs, unsupported inference shapes, and semantic consumers.
 - Facet-only workspace contract: CRA_FACET_ONLY=1 crystal spec spec/cra/workspace
 - End-to-end LSP test: uv run pytest
 - Facet semantic parity: crystal run scripts/check_facet_semantic_parity.cr
+- Facet upstream macro parity: `(cd ../facet && crystal run scripts/check_upstream_macro_parity.cr)`
 - Initialize benchmark: python3 scripts/bench_lsp_initialize.py
 - Manual client: uv run main.py (uses the Python env in pyproject.toml)
 
@@ -67,8 +70,9 @@ remaining macro APIs, unsupported inference shapes, and semantic consumers.
 - Facet expands standard declaration macros and the supported user-macro subset;
   generated declarations are indexed under `facet-macro:` URIs. Unsupported
   AST arguments are preserved as source-backed values. Facet-native type-aware
-  values cover lexical `@type`, indexed `resolve`, members, constants, and
-  explicit ancestry; remaining expansions stay under `crystal-macro:` URIs. Preserve the distinction
+  values cover lexical `@type`, indexed `resolve`, members, constants, explicit
+  ancestry, and annotations on types/methods/instance variables/arguments;
+  remaining expansions stay under `crystal-macro:` URIs. Preserve the distinction
   between macro source rendering and scalar values when extending evaluation.
 
 ## Parser boundary

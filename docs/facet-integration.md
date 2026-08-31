@@ -51,8 +51,8 @@ editor startup from eagerly expanding the entire toolchain.
 ## Current performance snapshot
 
 On 2026-08-31, a release build initialized against this repository with a
-median of 5.329 seconds on the legacy frontend and 3.216 seconds in
-`CRA_FACET_ONLY=1` mode (`3` measured runs after `1` warmup), a `1.66x`
+median of 5.797 seconds on the legacy frontend and 3.626 seconds in
+`CRA_FACET_ONLY=1` mode (`3` measured runs after `1` warmup), a `1.60x`
 speedup. Reproduce the machine-local comparison with
 `python3 scripts/bench_lsp_initialize.py`; the result is evidence for the
 current architecture, not a fixed CI threshold.
@@ -109,12 +109,17 @@ current architecture, not a fixed CI threshold.
 - Facet-native type-aware macro values expose lexical `@type`, indexed
   `resolve`/`resolve?`, methods, instance variables, constants, method/argument
   metadata, explicit superclasses/ancestors, kind predicates, and subtype
-  checks. Declaration edits invalidate and requeue materialized type-aware
-  expansion consumers.
+  checks. Types, methods, instance variables, and arguments also expose
+  annotations with positional and named values. Declaration and annotation
+  edits invalidate and requeue materialized type-aware expansion consumers.
+- Facet's committed Crystal 1.21 macro corpus matches exact output for all
+  371 self-contained upstream evaluator contracts. The fixture separately
+  inventories 602 contextual evaluator assertions and 133 semantic examples,
+  so the remaining compiler-dependent surface is not counted as passing.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.
-- The complete workspace LSP contract runs with no Crystal AST: 100/100 examples
+- The complete workspace LSP contract runs with no Crystal AST: 101/101 examples
   cover completion, navigation, diagnostics/lints, symbols, references, rename,
   inline values, call/type hierarchy, macro-generated declarations, and
   dependent reindexing.
@@ -131,10 +136,10 @@ current architecture, not a fixed CI threshold.
    and representative workspaces, then retire its legacy Crystal fallback.
 3. Compare Facet-first public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
-4. Extend Facet macro evaluation across generic/union type metadata,
-   annotations, the remaining AST-node APIs, require-aware provider visibility,
-   and full block/yield semantics; then remove the cr-analyzer interpreter and all
-   `compiler/crystal/syntax` requires.
+4. Extend Facet macro evaluation across contextual generic/union type metadata,
+   the remaining compiler-backed AST-node/error APIs, require-aware provider
+   visibility, and semantic macro cases; then remove the cr-analyzer interpreter
+   and all `compiler/crystal/syntax` requires.
 
 Run the local declaration gate after semantic changes:
 

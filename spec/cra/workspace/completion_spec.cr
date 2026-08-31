@@ -241,6 +241,45 @@ describe CRA::Workspace do
     end
   end
 
+  it "completes methods generated from Facet annotation metadata" do
+    code = <<-CRYSTAL
+      annotation Field
+      end
+
+      class Profile
+        @[Field(name: "display_name")]
+        @name : String
+
+        macro expose_annotated_ivar
+          def {{@type.instance_vars.first.annotation(Field)[:name].id}} : String
+            @name
+          end
+        end
+
+        expose_annotated_ivar
+      end
+
+      def call(profile : Profile)
+        profile.dis
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "macro_annotation_introspection.cr")
+      File.write(path, code)
+      workspace = workspace_for(dir)
+      uri = "file://#{path}"
+      index = index_for(code, "profile.dis") + "profile.dis".size
+
+      items = workspace.complete(completion_request(uri, position_for(code, index), "."))
+
+      labels(items).should contain("display_name")
+      generated = workspace.facet_analyzer.find_class("Profile").not_nil!.methods
+        .find { |method| method.name == "display_name" }.not_nil!
+      generated.file.not_nil!.should start_with("facet-macro:")
+    end
+  end
+
   it "completes instance methods on typed locals" do
     code = <<-CRYSTAL
       class Greeter

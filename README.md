@@ -44,8 +44,10 @@ Active development. Implemented LSP features include completion (with resolve), 
 - No full compiler type checking or complete type-aware macro expansion. Type inference is best-effort based on annotations and simple assignments.
 - Facet incrementally expands standard declaration macros and a substantial
   user-macro subset, including lexical `@type`, indexed type resolution,
-  method/instance-variable/constant metadata, and explicit ancestry. Crystal-backed
-  fallback remains for the unsupported compile-time and AST-node macro APIs.
+  method/instance-variable/constant and annotation metadata, and explicit
+  ancestry. Its committed Crystal 1.21 corpus matches all 371 self-contained
+  upstream evaluator contracts; Crystal-backed fallback remains for contextual
+  compiler/type macro APIs and semantic cases that need richer fixtures.
 - Rename is best-effort and currently scoped to workspace files (stdlib is not edited).
 - Facet owns the incremental document store, cached syntax/diagnostics, UTF-16
   mapping, cursor lookup, selection ranges, symbols, and the primary declaration
