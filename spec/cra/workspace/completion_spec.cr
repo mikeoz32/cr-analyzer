@@ -207,6 +207,40 @@ describe CRA::Workspace do
     end
   end
 
+  it "completes methods generated through Facet type introspection" do
+    code = <<-CRYSTAL
+      class Profile
+        @name : String
+
+        macro expose_first_ivar
+          def {{@type.instance_vars.first.name.id}} : String
+            @{{@type.instance_vars.first.name.id}}
+          end
+        end
+
+        expose_first_ivar
+      end
+
+      def call(profile : Profile)
+        profile.na
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "macro_type_introspection.cr")
+      File.write(path, code)
+      workspace = workspace_for(dir)
+      uri = "file://#{path}"
+      index = index_for(code, "profile.na") + "profile.na".size
+
+      items = workspace.complete(completion_request(uri, position_for(code, index), "."))
+
+      labels(items).should contain("name")
+      generated = workspace.facet_analyzer.find_class("Profile").not_nil!.methods.find { |method| method.name == "name" }.not_nil!
+      generated.file.not_nil!.should start_with("facet-macro:")
+    end
+  end
+
   it "completes instance methods on typed locals" do
     code = <<-CRYSTAL
       class Greeter

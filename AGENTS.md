@@ -10,9 +10,10 @@ workspace-owned incremental syntax database, diagnostics, cursor lookup,
 selection ranges, document/workspace symbols, and the primary declaration-level
 semantic index. Facet owns completion syntax and common inference, navigation,
 hover, signature help, references, rename, highlights, and type hierarchy,
-including error-tolerant buffers rejected by Crystal::Parser. The Crystal path
-remains an explicit fallback for unsupported type-aware macro expansion,
-unsupported inference shapes, and remaining semantic consumers.
+including error-tolerant buffers rejected by Crystal::Parser. Facet also owns
+the first type-aware macro slice (`@type`, type resolution, members, constants,
+and explicit ancestry). The Crystal path remains an explicit fallback for the
+remaining macro APIs, unsupported inference shapes, and semantic consumers.
 
 ## Setup
 
@@ -54,7 +55,7 @@ unsupported inference shapes, and remaining semantic consumers.
   semantic resolution; legacy Crystal edges are fallback only for legacy items.
 - macro expansion -> Facet `QueryDb#expand` -> generated-declaration delta under
   `facet-macro:` URIs -> primary Facet semantic index; the legacy interpreter
-  covers unsupported type-aware macro APIs during cutover. Supported user macro
+  covers the remaining unsupported type-aware APIs during cutover. Supported user macro
   blocks preserve caller AST through `yield`, `block.body`, and `block.args`;
   collection macro blocks keep their own parameters and propagate outer values.
 - diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
@@ -65,8 +66,9 @@ unsupported inference shapes, and remaining semantic consumers.
 - TypeRef is lightweight: name + generic args + union types. Inference is best-effort (annotations, Foo.new, Array/Hash literals with of).
 - Facet expands standard declaration macros and the supported user-macro subset;
   generated declarations are indexed under `facet-macro:` URIs. Unsupported
-  AST arguments are preserved as source-backed values; unsupported type-aware
-  expansions remain under `crystal-macro:` URIs. Preserve the distinction
+  AST arguments are preserved as source-backed values. Facet-native type-aware
+  values cover lexical `@type`, indexed `resolve`, members, constants, and
+  explicit ancestry; remaining expansions stay under `crystal-macro:` URIs. Preserve the distinction
   between macro source rendering and scalar values when extending evaluation.
 
 ## Parser boundary
@@ -86,10 +88,11 @@ unsupported inference shapes, and remaining semantic consumers.
   navigation index for types, methods, aliases, includes, inheritance, enum
   members, docs, and locations. Keep the Crystal index as a measured fallback
   until type-aware macro APIs and the remaining semantic consumers move.
-- Facet expansion consumers are invalidated from macro-name footprints. Reindex
-  `pending_expansion_file_ids` only, remove the stable virtual-file slice first,
-  and index only the generated declaration delta rather than duplicating the
-  full expanded source.
+- Facet expansion consumers are invalidated from macro-name/required-file
+  footprints. Consumers that use type introspection additionally depend on the
+  workspace declaration revision. Reindex `pending_expansion_file_ids` only,
+  remove the stable virtual-file slice first, and index only the generated
+  declaration delta rather than duplicating the full expanded source.
 - Keep macro expansion in the materialized project/on-demand QueryDb; do not
   make editor initialization build a global expansion index over stdlib and
   `lib` sources.

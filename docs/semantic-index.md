@@ -59,9 +59,9 @@ included methods disappear after their provider declaration is removed.
 Supported macros:
 
 - Facet-native: accessor macro families, `record`, and user-defined macros in
-  the supported lexical/control/value subset
-- Crystal fallback: unsupported compile-time type introspection and AST-node
-  macro APIs
+  the supported lexical/control/value subset, including lexical `@type`,
+  indexed `resolve`, member/constant metadata, and explicit ancestry
+- Crystal fallback: remaining compile-time type/annotation and AST-node macro APIs
 
 Facet-generated nodes are indexed under `facet-macro:` virtual URIs. Legacy
 fallback nodes retain `crystal-macro:` URIs until the cutover is complete.
