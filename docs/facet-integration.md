@@ -114,7 +114,7 @@ current architecture, not a fixed CI threshold.
   edits invalidate and requeue materialized type-aware expansion consumers.
 - Facet's committed Crystal 1.21 runtime macro corpus captures all 1,017
   contracts executed by the official evaluator specs and matches exact output
-  for 698/900 portable contracts, including all 371 self-contained contracts.
+  for 718/900 portable contracts, including all 371 self-contained contracts.
   Captured AST values retain start/end locations, documentation, and structural
   root names with generic/non-generic variants. Recursive call structure exposes
   arguments, receiver/block data, nested named-argument names/values, and
@@ -125,8 +125,10 @@ current architecture, not a fixed CI threshold.
   external names. Type declaration views cover `ClassDef`, `ModuleDef`,
   `EnumDef`, `AnnotationDef`, `LibDef`, and `CStructOrUnionDef`, including
   bodies, inheritance/base types, generic parameters, splats, and declaration
-  flags; Facet-native macro arguments provide the same views. The remaining
-  202 portable mismatches, 117 program-context contracts, and 133
+  flags. Inline assembly views cover `Asm` and nested `AsmOperand` values,
+  including text, operands, constraints, clobbers, and option flags;
+  Facet-native macro arguments provide the same views. The remaining
+  182 portable mismatches, 117 program-context contracts, and 133
   semantic examples remain explicit and are not counted as passing.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider

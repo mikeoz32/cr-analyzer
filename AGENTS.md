@@ -17,8 +17,8 @@ call fields (`args`, receiver/block data, named arguments, and `global?`) plus
 structured `case`/`select`, exception-handler/rescue, and function-declaration
 fields (`Def`, `Macro`, `FunDef`, and nested arguments), plus type-declaration
 fields (`ClassDef`, `ModuleDef`, `EnumDef`, `AnnotationDef`, `LibDef`, and
-`CStructOrUnionDef`).
-Facet's committed Crystal 1.21 runtime corpus gates 698/900 portable contracts
+`CStructOrUnionDef`), and inline-assembly fields (`Asm` and `AsmOperand`).
+Facet's committed Crystal 1.21 runtime corpus gates 718/900 portable contracts
 executed by the official evaluator specs, including all 371 self-contained
 contracts, and separately tracks 117 program-context contracts. The Crystal
 path remains an explicit fallback for contextual compiler/type macro APIs,
