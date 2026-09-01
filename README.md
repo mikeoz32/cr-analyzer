@@ -50,8 +50,10 @@ Active development. Implemented LSP features include completion (with resolve), 
   arguments, `global?`, structured `case`/`select` branches, and exception
   handler/rescue fields. Function declarations expose bodies, parameters,
   splats, block arguments, return types, free variables, receivers, visibility,
-  and external function names. Its committed Crystal 1.21 runtime corpus matches
-  exact output for 658/900 portable contracts executed by the official evaluator
+  and external function names. Type declarations expose kind, body,
+  superclass/base type, generic parameters and splat position, and
+  abstract/struct/union flags. Its committed Crystal 1.21 runtime corpus matches
+  exact output for 698/900 portable contracts executed by the official evaluator
   specs, including all 371 self-contained contracts. Crystal-backed fallback
   remains for 117 program-context contracts, contextual compiler/type macro
   APIs, and semantic cases that need richer fixtures.
