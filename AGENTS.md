@@ -12,8 +12,9 @@ semantic index. Facet owns completion syntax and common inference, navigation,
 hover, signature help, references, rename, highlights, and type hierarchy,
 including error-tolerant buffers rejected by Crystal::Parser. Facet also owns
 the first type-aware macro slice (`@type`, type resolution, members, constants,
-explicit ancestry, and annotation metadata). Facet's committed Crystal 1.21
-runtime corpus gates 517/900 portable contracts executed by the official
+explicit ancestry, annotation metadata, and captured AST root names (including
+generic/non-generic variants). Facet's committed Crystal 1.21 runtime corpus
+gates 568/900 portable contracts executed by the official
 evaluator specs, including all 371 self-contained contracts, and separately
 tracks 117 program-context contracts. The Crystal path remains an explicit
 fallback for contextual compiler/type macro APIs, unsupported inference shapes,

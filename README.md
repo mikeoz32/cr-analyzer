@@ -45,9 +45,10 @@ Active development. Implemented LSP features include completion (with resolve), 
 - Facet incrementally expands standard declaration macros and a substantial
   user-macro subset, including lexical `@type`, indexed type resolution,
   method/instance-variable/constant and annotation metadata, and explicit
-  ancestry. Its committed Crystal 1.21 runtime corpus matches exact output for
-  517/900 portable contracts executed by the official evaluator specs,
-  including all 371 self-contained contracts. Crystal-backed fallback remains
+  ancestry. Captured AST values expose structural root names, including generic
+  and non-generic variants. Its committed Crystal 1.21 runtime corpus matches
+  exact output for 568/900 portable contracts executed by the official evaluator
+  specs, including all 371 self-contained contracts. Crystal-backed fallback remains
   for 117 program-context contracts, contextual compiler/type macro APIs, and
   semantic cases that need richer fixtures.
 - Rename is best-effort and currently scoped to workspace files (stdlib is not edited).
