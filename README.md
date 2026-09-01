@@ -46,7 +46,7 @@ Active development. Implemented LSP features include completion (with resolve), 
   user-macro subset, including lexical `@type`, indexed type resolution,
   method/instance-variable/constant and annotation metadata, and explicit
   ancestry. Its committed Crystal 1.21 runtime corpus matches exact output for
-  506/900 portable contracts executed by the official evaluator specs,
+  517/900 portable contracts executed by the official evaluator specs,
   including all 371 self-contained contracts. Crystal-backed fallback remains
   for 117 program-context contracts, contextual compiler/type macro APIs, and
   semantic cases that need richer fixtures.

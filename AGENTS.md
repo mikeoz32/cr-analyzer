@@ -13,7 +13,7 @@ hover, signature help, references, rename, highlights, and type hierarchy,
 including error-tolerant buffers rejected by Crystal::Parser. Facet also owns
 the first type-aware macro slice (`@type`, type resolution, members, constants,
 explicit ancestry, and annotation metadata). Facet's committed Crystal 1.21
-runtime corpus gates 506/900 portable contracts executed by the official
+runtime corpus gates 517/900 portable contracts executed by the official
 evaluator specs, including all 371 self-contained contracts, and separately
 tracks 117 program-context contracts. The Crystal path remains an explicit
 fallback for contextual compiler/type macro APIs, unsupported inference shapes,
@@ -74,7 +74,8 @@ and semantic consumers.
   generated declarations are indexed under `facet-macro:` URIs. Unsupported
   AST arguments are preserved as source-backed values. Facet-native type-aware
   values cover lexical `@type`, indexed `resolve`, members, constants, explicit
-  ancestry, and annotations on types/methods/instance variables/arguments;
+  ancestry, annotations on types/methods/instance variables/arguments, and
+  captured AST locations/documentation;
   remaining expansions stay under `crystal-macro:` URIs. Preserve the distinction
   between macro source rendering and scalar values when extending evaluation.
 

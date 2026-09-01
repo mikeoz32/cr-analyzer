@@ -114,8 +114,9 @@ current architecture, not a fixed CI threshold.
   edits invalidate and requeue materialized type-aware expansion consumers.
 - Facet's committed Crystal 1.21 runtime macro corpus captures all 1,017
   contracts executed by the official evaluator specs and matches exact output
-  for 506/900 portable contracts, including all 371 self-contained contracts.
-  The remaining 394 portable mismatches, 117 program-context contracts, and 133
+  for 517/900 portable contracts, including all 371 self-contained contracts.
+  Captured AST values retain start/end locations and documentation. The
+  remaining 383 portable mismatches, 117 program-context contracts, and 133
   semantic examples remain explicit and are not counted as passing.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
