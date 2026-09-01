@@ -114,13 +114,15 @@ current architecture, not a fixed CI threshold.
   edits invalidate and requeue materialized type-aware expansion consumers.
 - Facet's committed Crystal 1.21 runtime macro corpus captures all 1,017
   contracts executed by the official evaluator specs and matches exact output
-  for 581/900 portable contracts, including all 371 self-contained contracts.
+  for 609/900 portable contracts, including all 371 self-contained contracts.
   Captured AST values retain start/end locations, documentation, and structural
   root names with generic/non-generic variants. Recursive call structure exposes
   arguments, receiver/block data, nested named-argument names/values, and
-  `global?`; Facet-native macro arguments provide the same view. The remaining
-  319 portable mismatches, 117 program-context contracts, and 133 semantic
-  examples remain explicit and are not counted as passing.
+  `global?`. Recursive control-flow structure exposes `case`/`select` conditions,
+  branches and exhaustive flags plus exception bodies, rescue names/types,
+  `else`, and `ensure`; Facet-native macro arguments provide the same views. The
+  remaining 291 portable mismatches, 117 program-context contracts, and 133
+  semantic examples remain explicit and are not counted as passing.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.

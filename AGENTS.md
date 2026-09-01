@@ -13,8 +13,9 @@ hover, signature help, references, rename, highlights, and type hierarchy,
 including error-tolerant buffers rejected by Crystal::Parser. Facet also owns
 the first type-aware macro slice: `@type`, type resolution, members, constants,
 explicit ancestry, annotation metadata, captured AST root names, and structured
-call fields (`args`, receiver/block data, named arguments, and `global?`).
-Facet's committed Crystal 1.21 runtime corpus gates 581/900 portable contracts
+call fields (`args`, receiver/block data, named arguments, and `global?`) plus
+structured `case`/`select` and exception-handler/rescue fields.
+Facet's committed Crystal 1.21 runtime corpus gates 609/900 portable contracts
 executed by the official evaluator specs, including all 371 self-contained
 contracts, and separately tracks 117 program-context contracts. The Crystal
 path remains an explicit fallback for contextual compiler/type macro APIs,
