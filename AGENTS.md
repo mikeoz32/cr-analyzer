@@ -27,11 +27,13 @@ control expressions, yields, annotations, typedefs, external variables,
 read-instance-variable nodes, and string interpolations. Facet's string/symbol/macro-id
 methods preserve their AST result kinds; array/hash literal type metadata is
 retained at macro boundaries. Facet's committed Crystal 1.21 runtime corpus gates
-877/900 portable contracts executed by the official evaluator specs,
-including all 371 self-contained contracts, and separately tracks 117
-program-context contracts. The Crystal path remains an explicit fallback for
-contextual compiler/type macro APIs, unsupported inference shapes, and semantic
-consumers.
+all 900/900 portable contracts executed by the official evaluator specs,
+including exact diagnostics for four `parse_type` failures and all 371
+self-contained contracts. Environment values, compiler flags, and captured
+command output are explicit cache-keyed inputs; Facet does not execute arbitrary
+shell commands. The corpus separately tracks 117 program-context contracts. The
+Crystal path remains an explicit fallback for contextual compiler/type macro
+APIs, unsupported inference shapes, and semantic consumers.
 
 ## Setup
 

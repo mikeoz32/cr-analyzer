@@ -115,7 +115,8 @@ current architecture, not a fixed CI threshold.
   edits invalidate and requeue materialized type-aware expansion consumers.
 - Facet's committed Crystal 1.21 runtime macro corpus captures all 1,017
   contracts executed by the official evaluator specs and matches exact output
-  for 877/900 portable contracts, including all 371 self-contained contracts.
+  or expected diagnostic text for all 900/900 portable contracts, including all
+  371 self-contained contracts.
   Captured AST values retain start/end locations, documentation, and structural
   root names with generic/non-generic variants. Recursive call structure exposes
   arguments, receiver/block data, nested named-argument names/values, and
@@ -139,10 +140,13 @@ current architecture, not a fixed CI threshold.
   returned collections, range iteration, and boolean operands.
   Array and hash literal views additionally preserve elements, declared
   key/value types, and custom literal types. Facet-native macro arguments
-  provide the same views. All direct AST-field and returned-AST-collection
-  contracts are exact; the remaining 23 builtin-dependent
-  portable mismatches, 117 program-context contracts, and 133 semantic examples
-  remain explicit and are not counted as passing.
+  provide the same views. All portable direct AST-field,
+  returned-AST-collection, environment/flag, `parse_type`, and backtick
+  contracts are exact. Environment values, compiler flags, and captured command
+  output are explicit `MacroExpansionContext` inputs and participate in cache
+  fingerprints; Facet does not execute arbitrary shell commands. The 117
+  program-context contracts and 133 semantic examples remain explicit and are
+  not counted as passing.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.
@@ -164,9 +168,9 @@ current architecture, not a fixed CI threshold.
 3. Compare Facet-first public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
 4. Extend Facet macro evaluation across contextual generic/union type metadata,
-   the remaining compiler-backed AST-node/error APIs, require-aware provider
-   visibility, and semantic macro cases; then remove the cr-analyzer interpreter
-   and all `compiler/crystal/syntax` requires.
+   compiler-backed program state, broader macro-error contracts, require-aware
+   provider visibility, and semantic macro cases; then remove the cr-analyzer
+   interpreter and all `compiler/crystal/syntax` requires.
 
 Run the local declaration gate after semantic changes:
 
