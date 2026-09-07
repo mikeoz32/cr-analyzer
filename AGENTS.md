@@ -19,10 +19,11 @@ fields (`Def`, `Macro`, `FunDef`, and nested arguments), plus type-declaration
 fields (`ClassDef`, `ModuleDef`, `EnumDef`, `AnnotationDef`, `LibDef`, and
 `CStructOrUnionDef`), inline-assembly fields (`Asm` and `AsmOperand`), and type
 syntax (`TypeDeclaration`, `ProcNotation`, `Metaclass`, `Generic`, `Union`, and
-`Path`) with `resolve`/`resolve?`. Facet's committed Crystal 1.21 runtime corpus
-gates 755/900 portable contracts executed by the official evaluator specs,
-including all 371 self-contained
-contracts, and separately tracks 117 program-context contracts. The Crystal
+`Path`) with `resolve`/`resolve?`, plus expression fields for proc
+literals/pointers, casts, conditionals, assignments, and ranges. Facet's
+committed Crystal 1.21 runtime corpus gates 788/900 portable contracts executed
+by the official evaluator specs, including all 371 self-contained contracts,
+and separately tracks 117 program-context contracts. The Crystal
 path remains an explicit fallback for contextual compiler/type macro APIs,
 unsupported inference shapes, and semantic consumers.
 

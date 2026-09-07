@@ -54,8 +54,10 @@ Active development. Implemented LSP features include completion (with resolve), 
   superclass/base type, generic parameters and splat position, and
   abstract/struct/union flags. Inline assembly exposes its text, operands,
   constraints, clobbers, and flags. Type syntax exposes declarations, proc
-  notation, metaclasses, generics, unions, paths, and resolvable forms. Its
-  committed Crystal 1.21 runtime corpus matches exact output for 755/900
+  notation, metaclasses, generics, unions, paths, and resolvable forms.
+  Expression views expose proc literals/pointers, casts, conditionals,
+  assignments, and executable ranges. Its committed Crystal 1.21 runtime
+  corpus matches exact output for 788/900
   portable contracts executed by the official evaluator specs, including all
   371 self-contained contracts. Crystal-backed fallback remains for 117
   program-context contracts, contextual compiler/type macro APIs, and semantic
