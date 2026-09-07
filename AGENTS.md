@@ -23,7 +23,8 @@ syntax (`TypeDeclaration`, `ProcNotation`, `Metaclass`, `Generic`, `Union`, and
 literals/pointers, casts, conditionals, assignments, and ranges. Facet's
 string/symbol/macro-id methods preserve their AST result kinds, and boolean
 expressions expose `left`/`right`. Facet's committed Crystal 1.21 runtime corpus
-gates 810/900 portable contracts executed by the official evaluator specs,
+also preserves array/hash literal type metadata at macro boundaries and gates
+815/900 portable contracts executed by the official evaluator specs,
 including all 371 self-contained contracts, and separately tracks 117
 program-context contracts. The Crystal path remains an explicit fallback for
 contextual compiler/type macro APIs, unsupported inference shapes, and semantic
