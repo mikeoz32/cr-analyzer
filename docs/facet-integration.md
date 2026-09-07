@@ -148,8 +148,16 @@ current architecture, not a fixed CI threshold.
   output are explicit `MacroExpansionContext` inputs and participate in cache
   fingerprints; Facet does not execute arbitrary shell commands. The contextual
   gate also replays 106 structured `TypeNode` snapshots and compares six
-  print-family output effects byte-for-byte. The 133 semantic examples remain
-  explicit and are not counted as passing.
+  print-family output effects byte-for-byte. A second committed gate replays all
+  147 expansion events emitted by the 133 official semantic macro examples:
+  69 user-macro calls and 78 inline expansions, with 131 successful outputs and
+  16 errors. Facet currently matches 127/147 by exact text or equivalent Facet
+  semantic AST. No event is skipped; the 20 unsupported events remain explicit
+  mismatches requiring richer generic/free-variable and type-member context,
+  compile-time constant state, or nested method-introspection control flow.
+  Structured `@caller`, yielded arguments, `skip_file`, tuple splat binding,
+  semantic type-argument resolution, and exact macro failure diagnostics are
+  Facet-native.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.
@@ -170,10 +178,11 @@ current architecture, not a fixed CI threshold.
    and representative workspaces, then retire its legacy Crystal fallback.
 3. Compare Facet-first public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
-4. Extend live Facet macro evaluation beyond captured runtime state across
-   generic/union type metadata, broader macro-error contracts, require-aware
-   provider visibility, and semantic macro cases; then remove the cr-analyzer
-   interpreter and all `compiler/crystal/syntax` requires.
+4. Supply the remaining semantic macro events with explicit generic/free-variable,
+   type-member, and compile-time constant state; implement nested/verbatim
+   method-introspection controls; then remove the cr-analyzer interpreter and all
+   `compiler/crystal/syntax` requires after reaching and shadow-validating
+   147/147.
 
 Run the local declaration gate after semantic changes:
 

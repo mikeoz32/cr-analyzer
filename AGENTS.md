@@ -33,6 +33,12 @@ portable and 142 program-context cases, including exact diagnostics for all 25
 print-family output effects, and all 371 self-contained contracts. Environment
 values, compiler flags, captured command output, and 106 structured `TypeNode`
 snapshots are explicit inputs; Facet does not execute arbitrary shell commands.
+The semantic macro gate additionally replays all 147 expansion events emitted
+by the 133 official semantic examples and currently matches 127/147 by exact
+text or equivalent Facet semantic AST, with all 20 unsupported events retained
+as explicit mismatches. Structured `@caller`, yielded arguments, `skip_file`,
+semantic type-argument resolution, and exact macro failure diagnostics are
+Facet-native.
 The Crystal path remains an explicit fallback for live compiler/type macro APIs
 beyond the captured runtime corpus, unsupported inference shapes, and semantic
 consumers.
@@ -49,6 +55,7 @@ consumers.
 - Facet semantic parity: crystal run scripts/check_facet_semantic_parity.cr
 - Facet upstream macro parity: `(cd ../facet && crystal run scripts/check_upstream_macro_parity.cr)`
 - Facet executed macro parity: `(cd ../facet && crystal run scripts/check_upstream_macro_runtime_parity.cr)`
+- Facet semantic macro parity: `(cd ../facet && crystal run scripts/check_upstream_macro_semantic_parity.cr)`
 - Initialize benchmark: python3 scripts/bench_lsp_initialize.py
 - Manual client: uv run main.py (uses the Python env in pyproject.toml)
 
