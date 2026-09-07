@@ -64,13 +64,13 @@ Active development. Implemented LSP features include completion (with resolve), 
   string methods preserve `StringLiteral`, `SymbolLiteral`, and `MacroId`
   result kinds; typed array/hash arguments expose their declared element types
   and custom literal type. Its committed Crystal 1.21 runtime corpus matches
-  exact output or expected diagnostic text for all 900/900 portable contracts
-  executed by the official evaluator specs, including all 371 self-contained
-  contracts. Environment values, compiler flags, and captured command output
-  are explicit cache-keyed inputs; Facet never executes arbitrary shell
-  commands. Crystal-backed fallback remains for 117 program-context contracts,
-  contextual compiler/type macro APIs, and semantic cases that need richer
-  fixtures.
+  exact output, expected diagnostic text, and output effects for all
+  1,017/1,017 contracts executed by the official evaluator specs: 900 portable
+  and 117 program-context cases, including all 371 self-contained contracts.
+  Environment values, compiler flags, captured command output, and 105
+  structured `TypeNode` snapshots are explicit inputs; Facet never executes
+  arbitrary shell commands. Crystal-backed fallback remains for live
+  compiler/type APIs and semantic cases beyond this captured runtime corpus.
 - Rename is best-effort and currently scoped to workspace files (stdlib is not edited).
 - Facet owns the incremental document store, cached syntax/diagnostics, UTF-16
   mapping, cursor lookup, selection ranges, symbols, and the primary declaration
