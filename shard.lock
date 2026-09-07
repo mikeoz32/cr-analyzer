@@ -2,7 +2,7 @@ version: 2.0
 shards:
   facet:
     git: https://github.com/mikeoz32/facet.git
-    version: 0.1.5+git.commit.74cee3ac431e1bd747465e409d8f48ed4f945c31
+    version: 0.1.5+git.commit.5271bb347e4e360b5cf5f00c93cb957e6437d345
 
   markd:
     git: https://github.com/icyleaf/markd.git

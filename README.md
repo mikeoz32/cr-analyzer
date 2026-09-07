@@ -65,9 +65,10 @@ Active development. Implemented LSP features include completion (with resolve), 
   result kinds; typed array/hash arguments expose their declared element types
   and custom literal type. Its committed Crystal 1.21 runtime corpus matches
   exact output, expected diagnostic text, and output effects for all
-  1,017/1,017 contracts executed by the official evaluator specs: 900 portable
-  and 117 program-context cases, including all 371 self-contained contracts.
-  Environment values, compiler flags, captured command output, and 105
+  1,042/1,042 contracts executed by the official evaluator specs: 900 portable
+  and 142 program-context cases, including all 25 `assert_macro_error` calls,
+  four nested `parse_type` failures, and all 371 self-contained contracts.
+  Environment values, compiler flags, captured command output, and 106
   structured `TypeNode` snapshots are explicit inputs; Facet never executes
   arbitrary shell commands. Crystal-backed fallback remains for live
   compiler/type APIs and semantic cases beyond this captured runtime corpus.

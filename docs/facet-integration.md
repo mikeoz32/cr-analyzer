@@ -113,11 +113,12 @@ current architecture, not a fixed CI threshold.
   checks. Types, methods, instance variables, and arguments also expose
   annotations with positional and named values. Declaration and annotation
   edits invalidate and requeue materialized type-aware expansion consumers.
-- Facet's committed Crystal 1.21 runtime macro corpus captures all 1,017
+- Facet's committed Crystal 1.21 runtime macro corpus captures all 1,042
   contracts executed by the official evaluator specs and matches exact output,
-  expected diagnostic text, and output effects for all 1,017/1,017: 900
-  portable and 117 program-context cases, including all 371 self-contained
-  contracts.
+  expected diagnostic text, and output effects for all 1,042/1,042: 900
+  portable and 142 program-context cases, including all 25 official
+  `assert_macro_error` calls, four nested `parse_type` failures, and all 371
+  self-contained contracts.
   Captured AST values retain start/end locations, documentation, and structural
   root names with generic/non-generic variants. Recursive call structure exposes
   arguments, receiver/block data, nested named-argument names/values, and
@@ -146,7 +147,7 @@ current architecture, not a fixed CI threshold.
   contracts are exact. Environment values, compiler flags, and captured command
   output are explicit `MacroExpansionContext` inputs and participate in cache
   fingerprints; Facet does not execute arbitrary shell commands. The contextual
-  gate also replays 105 structured `TypeNode` snapshots and compares six
+  gate also replays 106 structured `TypeNode` snapshots and compares six
   print-family output effects byte-for-byte. The 133 semantic examples remain
   explicit and are not counted as passing.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
