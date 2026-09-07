@@ -104,8 +104,9 @@ current architecture, not a fixed CI threshold.
   collections support lexical map/select/predicate/iteration blocks used by
   declaration-generating macro control flow.
 - Macro strings, symbols, identifiers, and opaque AST arguments retain distinct
-  source rendering and scalar values; direct interpolation, `id`, `stringify`,
-  `symbolize`, and basic AST predicates no longer erase Crystal syntax roles.
+  source rendering and scalar values; direct interpolation, delegated string
+  methods, `id`, `stringify`, `symbolize`, `chars`, cross-kind macro-id equality,
+  and basic AST predicates preserve Crystal syntax roles.
 - Facet-native type-aware macro values expose lexical `@type`, indexed
   `resolve`/`resolve?`, methods, instance variables, constants, method/argument
   metadata, explicit superclasses/ancestors, kind predicates, and subtype
@@ -114,7 +115,7 @@ current architecture, not a fixed CI threshold.
   edits invalidate and requeue materialized type-aware expansion consumers.
 - Facet's committed Crystal 1.21 runtime macro corpus captures all 1,017
   contracts executed by the official evaluator specs and matches exact output
-  for 788/900 portable contracts, including all 371 self-contained contracts.
+  for 810/900 portable contracts, including all 371 self-contained contracts.
   Captured AST values retain start/end locations, documentation, and structural
   root names with generic/non-generic variants. Recursive call structure exposes
   arguments, receiver/block data, nested named-argument names/values, and
@@ -130,11 +131,11 @@ current architecture, not a fixed CI threshold.
   type-syntax views cover `TypeDeclaration`, `ProcNotation`, `Metaclass`,
   `Generic`, `Union`, and `Path`, including `resolve`/`resolve?` behavior.
   Expression views cover `ProcLiteral`, `ProcPointer`, `Cast`, `NilableCast`,
-  `If`, `Assign`, `MultiAssign`, and `RangeLiteral`, including immutable
-  returned collections and range iteration.
-  Facet-native macro arguments provide the same views. The remaining
-  112 portable mismatches, 117 program-context contracts, and 133
-  semantic examples remain explicit and are not counted as passing.
+  `If`, `Assign`, `MultiAssign`, `RangeLiteral`, `And`, and `Or`, including
+  immutable returned collections, range iteration, and boolean operands.
+  Facet-native macro arguments provide the same views. The remaining 90
+  portable mismatches, 117 program-context contracts, and 133 semantic examples
+  remain explicit and are not counted as passing.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.
