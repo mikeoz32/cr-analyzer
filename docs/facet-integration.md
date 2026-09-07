@@ -158,6 +158,12 @@ current architecture, not a fixed CI threshold.
   cache fingerprints. Structured `@caller`, yielded arguments, `skip_file`,
   tuple splat binding, semantic type-argument resolution, and exact macro
   failure diagnostics are Facet-native.
+- A broader gate captures all 3,288 official compiler-semantic examples (nine
+  upstream pending), reducing 150,926 raw stdlib/bootstrap macro events to
+  2,731 unique invocation/definition/scope/target-flag/semantic contexts. Facet
+  currently matches 2,027/2,731, with all 704 mismatches retained. The harness
+  compares one upstream expansion with `MacroExpander#expand_once`; production
+  `QueryDb#expand` continues iterating to a fixed point.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.
@@ -178,11 +184,10 @@ current architecture, not a fixed CI threshold.
    and representative workspaces, then retire its legacy Crystal fallback.
 3. Compare Facet-first public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
-4. Supply the remaining semantic macro events with explicit generic/free-variable,
-   type-member, and compile-time constant state; implement nested/verbatim
-   method-introspection controls; then remove the cr-analyzer interpreter and all
-   `compiler/crystal/syntax` requires after reaching and shadow-validating
-   147/147.
+4. Drive the broader full-semantic macro gate from 2,027/2,731 to complete
+   parity and supply the same target/type context from the live require-aware
+   index; then remove the cr-analyzer interpreter and all
+   `compiler/crystal/syntax` requires after shadow validation.
 
 Run the local declaration gate after semantic changes:
 
