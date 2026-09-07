@@ -161,8 +161,9 @@ current architecture, not a fixed CI threshold.
 - A broader gate captures all 3,288 official compiler-semantic examples (nine
   upstream pending), reducing 150,926 raw stdlib/bootstrap macro events to
   2,731 unique invocation/definition/scope/target-flag/semantic contexts. Facet
-  currently matches 2,027/2,731, with all 704 mismatches retained. The harness
-  compares one upstream expansion with `MacroExpander#expand_once`; production
+  currently matches 2,376/2,731 (87.00%). All 1,077 user-macro call events
+  match; all 355 remaining inline mismatches are retained. The harness compares
+  one upstream expansion with `MacroExpander#expand_once`; production
   `QueryDb#expand` continues iterating to a fixed point.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
@@ -184,7 +185,7 @@ current architecture, not a fixed CI threshold.
    and representative workspaces, then retire its legacy Crystal fallback.
 3. Compare Facet-first public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
-4. Drive the broader full-semantic macro gate from 2,027/2,731 to complete
+4. Drive the 355 remaining full-semantic inline macro contexts to complete
    parity and supply the same target/type context from the live require-aware
    index; then remove the cr-analyzer interpreter and all
    `compiler/crystal/syntax` requires after shadow validation.

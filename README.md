@@ -77,10 +77,11 @@ Active development. Implemented LSP features include completion (with resolve), 
   constants, resolved paths, and exact path errors are explicit fingerprinted
   inputs. Structured `@caller`, yielded arguments, `skip_file`, and semantic
   type-argument resolution are native. Across the complete 3,288-example
-  semantic suite, a broader committed gate currently matches 2,027/2,731
-  distinct target-flag and semantic expansion contexts, retaining all 704
-  mismatches. Crystal-backed fallback remains for live compiler/type APIs and
-  semantic cases beyond these captured corpora.
+  semantic suite, a broader committed gate currently matches 2,376/2,731
+  (87.00%) distinct target-flag and semantic expansion contexts. All 1,077
+  user-macro call events match; all 355 remaining inline mismatches are retained.
+  Crystal-backed fallback remains for live compiler/type APIs and semantic cases
+  beyond these captured corpora.
 - Rename is best-effort and currently scoped to workspace files (stdlib is not edited).
 - Facet owns the incremental document store, cached syntax/diagnostics, UTF-16
   mapping, cursor lookup, selection ranges, symbols, and the primary declaration
