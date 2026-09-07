@@ -77,9 +77,10 @@ Active development. Implemented LSP features include completion (with resolve), 
   constants, resolved paths, and exact path errors are explicit fingerprinted
   inputs. Structured `@caller`, yielded arguments, `skip_file`, and semantic
   type-argument resolution are native. Across the complete 3,288-example
-  semantic suite, a broader committed gate currently matches 2,376/2,731
-  (87.00%) distinct target-flag and semantic expansion contexts. All 1,077
-  user-macro call events match; all 355 remaining inline mismatches are retained.
+  semantic suite, a broader committed gate matches all 2,736/2,736 distinct
+  target-flag and semantic expansion contexts: 1,077 user-macro calls and 1,659
+  inline expansions. Successful output checks include literal payloads as well
+  as semantic AST shape, and failure diagnostics must match exactly.
   Crystal-backed fallback remains for live compiler/type APIs and semantic cases
   beyond these captured corpora.
 - Rename is best-effort and currently scoped to workspace files (stdlib is not edited).

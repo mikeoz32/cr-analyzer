@@ -40,12 +40,13 @@ bindings, named-tuple key locations, type-member snapshots, compile-time
 constants, resolved paths, and exact path errors are explicit fingerprinted
 inputs. Structured `@caller`, yielded arguments, `skip_file`, semantic
 type-argument resolution, and exact macro failure diagnostics are Facet-native.
-The broader full-semantic gate retains 2,731 unique target-flag and semantic
-contexts emitted by all 3,288 official semantic examples; Facet currently
-matches 2,376/2,731 (87.00%). All 1,077 user-macro call events match; the 355
-remaining mismatches are confined to inline expansions and stay in the
-denominator. Event parity uses one `MacroExpander#expand_once` pass while
-production expansion still reaches a fixed point.
+The broader full-semantic gate retains 2,736 unique target-flag and semantic
+contexts emitted by all 3,288 official semantic examples; Facet matches
+2,736/2,736 (100%). All 1,077 user-macro call events and all 1,659 inline
+expansions are covered. Successful results compare literal payloads as well as
+semantic AST shape; failures compare exact diagnostics. Event parity uses one
+`MacroExpander#expand_once` pass while production expansion still reaches a
+fixed point.
 The Crystal path remains an explicit fallback for live compiler/type macro APIs
 beyond the captured runtime corpus, unsupported inference shapes, and semantic
 consumers.
