@@ -34,11 +34,12 @@ print-family output effects, and all 371 self-contained contracts. Environment
 values, compiler flags, captured command output, and 106 structured `TypeNode`
 snapshots are explicit inputs; Facet does not execute arbitrary shell commands.
 The semantic macro gate additionally replays all 147 expansion events emitted
-by the 133 official semantic examples and currently matches 127/147 by exact
-text or equivalent Facet semantic AST, with all 20 unsupported events retained
-as explicit mismatches. Structured `@caller`, yielded arguments, `skip_file`,
-semantic type-argument resolution, and exact macro failure diagnostics are
-Facet-native.
+by the 133 official semantic examples and matches 147/147 by exact text or
+equivalent Facet semantic AST, with no skipped events. Generic/free-variable
+bindings, named-tuple key locations, type-member snapshots, compile-time
+constants, resolved paths, and exact path errors are explicit fingerprinted
+inputs. Structured `@caller`, yielded arguments, `skip_file`, semantic
+type-argument resolution, and exact macro failure diagnostics are Facet-native.
 The Crystal path remains an explicit fallback for live compiler/type macro APIs
 beyond the captured runtime corpus, unsupported inference shapes, and semantic
 consumers.

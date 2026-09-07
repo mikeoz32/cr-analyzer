@@ -151,13 +151,13 @@ current architecture, not a fixed CI threshold.
   print-family output effects byte-for-byte. A second committed gate replays all
   147 expansion events emitted by the 133 official semantic macro examples:
   69 user-macro calls and 78 inline expansions, with 131 successful outputs and
-  16 errors. Facet currently matches 127/147 by exact text or equivalent Facet
-  semantic AST. No event is skipped; the 20 unsupported events remain explicit
-  mismatches requiring richer generic/free-variable and type-member context,
-  compile-time constant state, or nested method-introspection control flow.
-  Structured `@caller`, yielded arguments, `skip_file`, tuple splat binding,
-  semantic type-argument resolution, and exact macro failure diagnostics are
-  Facet-native.
+  16 errors. Facet matches 147/147 by exact text or equivalent Facet semantic
+  AST with no skipped events. Generic/free-variable bindings, named-tuple key
+  locations, type-member snapshots, compile-time constants, resolved paths, and
+  exact path errors are explicit expansion-context inputs and participate in
+  cache fingerprints. Structured `@caller`, yielded arguments, `skip_file`,
+  tuple splat binding, semantic type-argument resolution, and exact macro
+  failure diagnostics are Facet-native.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.

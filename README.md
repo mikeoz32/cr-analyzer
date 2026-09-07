@@ -71,12 +71,13 @@ Active development. Implemented LSP features include completion (with resolve), 
   Environment values, compiler flags, captured command output, and 106
   structured `TypeNode` snapshots are explicit inputs; Facet never executes
   arbitrary shell commands. Facet also runs all 147 expansion events emitted by
-  the 133 official semantic macro examples and currently matches 127/147 by
-  exact text or equivalent Facet semantic AST, retaining all 20 unsupported
-  events as explicit mismatches. Structured `@caller`, yielded arguments,
-  `skip_file`, and semantic type-argument resolution are native. Crystal-backed
-  fallback remains for live compiler/type APIs and semantic cases beyond these
-  captured corpora.
+  the 133 official semantic macro examples and matches 147/147 by exact text or
+  equivalent Facet semantic AST, with no skipped events. Generic/free-variable
+  bindings, named-tuple key locations, type-member snapshots, compile-time
+  constants, resolved paths, and exact path errors are explicit fingerprinted
+  inputs. Structured `@caller`, yielded arguments, `skip_file`, and semantic
+  type-argument resolution are native. Crystal-backed fallback remains for live
+  compiler/type APIs and semantic cases beyond these captured corpora.
 - Rename is best-effort and currently scoped to workspace files (stdlib is not edited).
 - Facet owns the incremental document store, cached syntax/diagnostics, UTF-16
   mapping, cursor lookup, selection ranges, symbols, and the primary declaration
