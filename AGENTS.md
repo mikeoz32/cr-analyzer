@@ -20,11 +20,12 @@ fields (`ClassDef`, `ModuleDef`, `EnumDef`, `AnnotationDef`, `LibDef`, and
 `CStructOrUnionDef`), inline-assembly fields (`Asm` and `AsmOperand`), and type
 syntax (`TypeDeclaration`, `ProcNotation`, `Metaclass`, `Generic`, `Union`, and
 `Path`) with `resolve`/`resolve?`, plus expression fields for proc
-literals/pointers, casts, conditionals, assignments, and ranges. Facet's
-string/symbol/macro-id methods preserve their AST result kinds, and boolean
-expressions expose `left`/`right`. Facet's committed Crystal 1.21 runtime corpus
-also preserves array/hash literal type metadata at macro boundaries and gates
-815/900 portable contracts executed by the official evaluator specs,
+literals/pointers, casts, conditionals, assignments, ranges, boolean and unary
+expressions, predicates, uninitialized variables, macro-control nodes, aliases,
+visibility modifiers, offsets, and requires. Facet's string/symbol/macro-id
+methods preserve their AST result kinds; array/hash literal type metadata is
+retained at macro boundaries. Facet's committed Crystal 1.21 runtime corpus gates
+845/900 portable contracts executed by the official evaluator specs,
 including all 371 self-contained contracts, and separately tracks 117
 program-context contracts. The Crystal path remains an explicit fallback for
 contextual compiler/type macro APIs, unsupported inference shapes, and semantic
