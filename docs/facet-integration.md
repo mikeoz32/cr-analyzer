@@ -166,10 +166,14 @@ current architecture, not a fixed CI threshold.
   semantic AST shape, and failures compare exact diagnostics. The harness
   compares one upstream expansion with `MacroExpander#expand_once`; production
   `QueryDb#expand` continues iterating to a fixed point.
+- Live expansion passes the cr-analyzer build target flags through an explicit
+  `MacroExpansionContext`; Facet includes its fingerprint in the incremental
+  expansion cache key. Environment values and shell outputs remain absent unless
+  a trusted caller supplies them explicitly.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.
-- The complete workspace LSP contract runs with no Crystal AST: 101/101 examples
+- The complete workspace LSP contract runs with no Crystal AST: 103/103 examples
   cover completion, navigation, diagnostics/lints, symbols, references, rename,
   inline values, call/type hierarchy, macro-generated declarations, and
   dependent reindexing.
@@ -186,8 +190,8 @@ current architecture, not a fixed CI threshold.
    and representative workspaces, then retire its legacy Crystal fallback.
 3. Compare Facet-first public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
-4. Supply the fully covered macro gate's target/type/annotation context from the
-   live require-aware index; then remove the cr-analyzer interpreter and all
+4. Supply the fully covered macro gate's remaining type/annotation context from
+   the live require-aware index; then remove the cr-analyzer interpreter and all
    `compiler/crystal/syntax` requires after shadow validation.
 
 Run the local declaration gate after semantic changes:

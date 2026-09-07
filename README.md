@@ -90,7 +90,9 @@ Active development. Implemented LSP features include completion (with resolve), 
   rename, highlights, type hierarchy, and the incrementally invalidated call
   graph are Facet-first and work in many Crystal-rejected incomplete buffers.
   Supported macro-generated declarations also enter the Facet semantic index
-  through incrementally invalidated `facet-macro:` slices. The temporary Crystal
+  through incrementally invalidated `facet-macro:` slices. Facet macro expansion
+  receives the cr-analyzer build-target flags through an explicit fingerprinted
+  context, so target-sensitive generated syntax remains cache-correct. The temporary Crystal
   AST remains for unsupported macro semantics, inference fallback, and remaining
   cutover work. `CRA_FACET_ONLY=1` disables construction of that AST; the complete
   workspace LSP contract suite runs in this mode in CI.

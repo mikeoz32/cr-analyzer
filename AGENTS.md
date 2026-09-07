@@ -97,6 +97,8 @@ consumers.
   covers the remaining unsupported type-aware APIs during cutover. Supported user macro
   blocks preserve caller AST through `yield`, `block.body`, and `block.args`;
   collection macro blocks keep their own parameters and propagate outer values.
+  The explicit build-target `MacroExpansionContext` participates in Facet's
+  expansion cache key, so `flag?` branches cannot reuse output from another target.
 - diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
 
 ## Semantic Index notes

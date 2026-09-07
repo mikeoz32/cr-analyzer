@@ -202,6 +202,41 @@ describe CRA::FacetDocumentStore do
     end
   end
 
+  it "passes explicit target flags into cached Facet expansion" do
+    with_tmpdir do |dir|
+      path = File.join(dir, "target_macro.cr")
+      uri = "file://#{path}"
+      context = Facet::Compiler::MacroExpansionContext.new(flags: ["facet_test_target"])
+      store = CRA::FacetDocumentStore.new(context)
+      store.register(uri, <<-CRYSTAL, path)
+        class Platform
+          {% if flag?(:facet_test_target) %}
+            def enabled
+            end
+          {% end %}
+        end
+      CRYSTAL
+
+      expanded = store.expanded_syntax(uri).not_nil!
+      expanded.nodes(Facet::Compiler::NodeKind::Def).map(&.name).should contain("enabled")
+      store.macro_context.flag("facet_test_target").should be_true
+    end
+  end
+
+  it "derives default macro flags from the cr-analyzer build target" do
+    context = CRA::FacetDocumentStore.build_target_macro_context
+
+    {% if flag?(:linux) %}
+      context.flag("linux").should be_true
+    {% end %}
+    {% if flag?(:x86_64) %}
+      context.flag("x86_64").should be_true
+    {% end %}
+    {% if flag?(:bits64) %}
+      context.flag("bits64").should be_true
+    {% end %}
+  end
+
   it "reindexes Facet macro-generated declarations after a provider edit" do
     with_tmpdir do |dir|
       macro_path = File.join(dir, "a_macros.cr")

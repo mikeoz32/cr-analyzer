@@ -50,6 +50,9 @@ This document describes the major runtime pieces and the request flow.
 - Macro provider edits invalidate only expansion consumers recorded in Facet's
   macro-name footprint. Their old virtual semantic slices are removed before
   generated declaration deltas are reindexed.
+- Facet expansion also keys on an explicit macro-context fingerprint. The live
+  store supplies the cr-analyzer build target flags, keeping `flag?` branches
+  deterministic and preventing cross-target cache reuse.
 - Initial eager expansion is limited to project-owned sources. Dependency and
   stdlib macro declarations remain on the lazy/legacy path until requested, so
   initialization does not expand thousands of unrelated files. A separate
