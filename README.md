@@ -59,11 +59,12 @@ Active development. Implemented LSP features include completion (with resolve), 
   assignments, executable ranges, boolean/unary-expression operands,
   predicates, uninitialized variables, macro-control nodes, aliases, visibility
   modifiers, offsets, requires, blocks, expression containers, loops, control
-  expressions, and yields. Delegated
+  expressions, yields, annotations, typedefs, external variables,
+  read-instance-variable nodes, and string interpolations. Delegated
   string methods preserve `StringLiteral`, `SymbolLiteral`, and `MacroId`
   result kinds; typed array/hash arguments expose their declared element types
   and custom literal type. Its committed Crystal 1.21 runtime corpus matches
-  exact output for 864/900 portable contracts executed by the official evaluator
+  exact output for 877/900 portable contracts executed by the official evaluator
   specs, including all 371 self-contained contracts. Crystal-backed fallback
   remains for 117
   program-context contracts, contextual compiler/type macro APIs, and semantic
