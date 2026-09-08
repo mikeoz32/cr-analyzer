@@ -69,7 +69,7 @@ current architecture, not a fixed CI threshold.
 
 - A committed first compiler-semantic corpus from eight official Crystal 1.21
   suites: 397 examples execute 529 type/error contracts. Facet matches the
-  current 131-contract baseline exactly; all 398 remaining contracts are listed
+  current 243-contract baseline exactly; all 286 remaining contracts are listed
   with explicit deferred reasons, so no semantic input is silently skipped.
 - Require-aware project/dependency/stdlib reachability plus strict/tolerant
   snapshots, revision-safe `NodeRef` handles, interned `TypeId` values,
@@ -206,8 +206,9 @@ current architecture, not a fixed CI threshold.
 
 ## Remaining cutover work
 
-1. Grow the 131/529 semantic baseline across constants, overload restrictions,
-   free variables, control-flow narrowing, blocks, and remaining diagnostics;
+1. Grow the 243/529 semantic baseline across constants, typed/named overload
+   restrictions, free variables, control-flow narrowing, blocks, and remaining
+   diagnostics;
    keep every non-matching case explicitly deferred.
 2. Feed `SemanticSnapshot` types/bindings into completion, hover, navigation,
    and call resolution under shadow comparison, then retire matching Psi
