@@ -1,6 +1,6 @@
 # cr-analyzer
 
-cr-analyzer is a lightweight Language Server Protocol (LSP) server for the Crystal language. It uses Facet's incremental syntax frontend and builds an editor-oriented semantic index without invoking the full compiler.
+cr-analyzer is a lightweight Language Server Protocol (LSP) server for the Crystal language. It uses Facet's incremental syntax frontend to parse project sources, dependencies, and the Crystal standard library, then builds an editor-oriented semantic index without invoking the full Crystal compiler pipeline.
 
 ## Status
 
@@ -8,7 +8,7 @@ Active development. Implemented LSP features include completion (with resolve), 
 
 ## Features
 
-- Workspace scan of project sources, `lib`, and Crystal stdlib.
+- Facet parsing and semantic indexing of project sources, `lib`, and Crystal stdlib during the workspace scan.
 - Go to declaration/definition for:
   - types (class/module/enum)
   - methods and overloads (arity aware)
@@ -163,7 +163,12 @@ shards build
 
 ### stdlib scanning
 
-The server uses CRYSTAL_PATH or CRYSTAL_HOME to locate the stdlib. If unset it falls back to /usr/share/crystal/src.
+The server parses and semantically indexes the Crystal stdlib with Facet during
+the initial workspace scan. It uses `CRYSTAL_PATH` or `CRYSTAL_HOME` to locate
+the sources; if neither is set, it falls back to `/usr/share/crystal/src`.
+Parsing the stdlib is distinct from macro expansion: stdlib macros are available
+to project code, but cr-analyzer does not eagerly expand every stdlib file at
+startup.
 
 ## Development
 
