@@ -223,6 +223,27 @@ describe CRA::FacetDocumentStore do
     end
   end
 
+  it "shares target flags with Facet semantic options" do
+    with_tmpdir do |dir|
+      path = File.join(dir, "target_semantics.cr")
+      uri = "file://#{path}"
+      context = Facet::Compiler::MacroExpansionContext.new(flags: ["preview_overload_order"])
+      store = CRA::FacetDocumentStore.new(context)
+      file_id = store.register(uri, <<-CRYSTAL, path)
+        def count(a, b); 1; end
+        def count(a, b, c = 0); 'x'; end
+        count(1, 2)
+      CRYSTAL
+      store.configure_semantics([dir], nil)
+
+      snapshot = store.semantic_snapshot(uri).not_nil!
+      syntax = store.syntax(uri).not_nil!
+      call = syntax.root.children.last.children.last
+      ref = Facet::Compiler::NodeRef.new(file_id, call.id, store.manager.revision(file_id))
+      store.semantic_db.not_nil!.types.display(snapshot.type_of(ref).not_nil!).should eq("Int32")
+    end
+  end
+
   it "derives default macro flags from the cr-analyzer build target" do
     context = CRA::FacetDocumentStore.build_target_macro_context
 

@@ -51,8 +51,11 @@ Facet 0.2.0 also introduces the compiler-grade `SemanticDb`: a require-aware
 project/dependency/stdlib graph, canonical `TypeId` values, revision-safe
 `NodeRef` handles, strict/tolerant snapshots, basic binding/body inference,
 method lookup, and coded semantic diagnostics. Its first official Crystal 1.21
-slice captures 529 type/error contracts from 397 examples: 29 are exact and all
-500 remaining cases are explicitly classified as deferred. The Crystal path
+slice captures 529 type/error contracts from 397 examples: 131 are exact and
+all 398 remaining cases are explicitly classified as deferred. This includes
+bare zero-argument calls, call-site specialization for untyped/defaulted
+parameters, structural generic/union arguments, and target-aware overload
+selection. The Crystal path
 remains an explicit fallback for live compiler/type macro APIs beyond the
 captured runtime corpus, unsupported inference shapes, and semantic consumers.
 
@@ -136,6 +139,10 @@ captured runtime corpus, unsupported inference shapes, and semantic consumers.
   Crystal semantic consumers; Facet features must continue to work when it is nil.
 - Facet uses stable per-URI file IDs in a workspace-owned `QueryDb`; do not
   reparse Facet locally or discard its `SyntaxTree`.
+- Query, expansion, semantic, and LSP indexes are process-local today and are
+  rebuilt after restart. A future persistent cache must key source-derived data
+  by content plus schema/compiler/target context and must rebind runtime
+  `FileId`, `NodeId`, and `TypeId` values instead of persisting them as stable IDs.
 - Facet owns diagnostic spans, UTF-16 conversion, selection ranges, and
   document/workspace symbols.
 - Completion line prefixes, enclosing type names, and keyword context come from

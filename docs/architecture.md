@@ -55,7 +55,8 @@ This document describes the major runtime pieces and the request flow.
   generated declaration deltas are reindexed.
 - Facet expansion also keys on an explicit macro-context fingerprint. The live
   store supplies the cr-analyzer build target flags, keeping `flag?` branches
-  deterministic and preventing cross-target cache reuse.
+  deterministic and preventing cross-target cache reuse. The same target flags
+  configure semantic overload behavior and participate in its analysis key.
 - Initial eager expansion is limited to project-owned sources. Dependency and
   stdlib macro declarations remain on the lazy/legacy path until requested, so
   initialization does not expand thousands of unrelated files. A separate
@@ -69,6 +70,9 @@ This document describes the major runtime pieces and the request flow.
 - Semantic lookup starts from the current document, follows its transitive
   `require` graph across project, shard, and stdlib roots, and never treats
   every registered file as implicitly visible.
+- All query, semantic, and editor indexes are process-local. Restarting the LSP
+  rebuilds them; a future persistent layer must use content/version/context
+  keys and reconstruct runtime IDs rather than serializing them as identities.
 
 ## Parser boundary
 

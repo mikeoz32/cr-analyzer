@@ -36,7 +36,13 @@ module CRA
 
     def configure_semantics(roots : Enumerable(String), prelude : String? = "prelude") : Nil
       resolver = Facet::Compiler::RegisteredSourceResolver.new(roots, prelude)
-      @semantic_db = Facet::Compiler::SemanticDb.new(@queries, resolver, @macro_context)
+      semantic_options = Facet::Compiler::SemanticOptions.new(@macro_context.flags)
+      @semantic_db = Facet::Compiler::SemanticDb.new(
+        @queries,
+        resolver,
+        @macro_context,
+        semantic_options: semantic_options
+      )
     end
 
     def semantic_snapshot(
@@ -212,6 +218,9 @@ module CRA
       {% end %}
       {% if flag?(:execution_context) %}
         flags << "execution_context"
+      {% end %}
+      {% if flag?(:preview_overload_order) %}
+        flags << "preview_overload_order"
       {% end %}
       Facet::Compiler::MacroExpansionContext.new(flags: flags)
     end

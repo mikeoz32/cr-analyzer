@@ -40,6 +40,12 @@ do not force ordinary macro re-expansion. Materialized type-aware consumers use
 a conservative workspace-declaration dependency so changed indexed members
 cannot leave generated declarations stale.
 
+The incremental databases are process-local today; restarting the language
+server rereads and reindexes the workspace. A reusable disk cache should be a
+separate content-addressed layer keyed by cache schema, Facet/Crystal versions,
+target options, and compiler-context fingerprints. Process-local `FileId`,
+`NodeId`, and `TypeId` values must be rebound when loading cached facts.
+
 The server advertises incremental LSP text synchronization and applies UTF-16
 range edits before advancing the Facet source revision. Frontend invalidation is
 currently file-grained: an edited file is reparsed, but unchanged files and
@@ -63,13 +69,14 @@ current architecture, not a fixed CI threshold.
 
 - A committed first compiler-semantic corpus from eight official Crystal 1.21
   suites: 397 examples execute 529 type/error contracts. Facet matches the
-  initial 29-contract baseline exactly; all 500 remaining contracts are listed
+  current 131-contract baseline exactly; all 398 remaining contracts are listed
   with explicit deferred reasons, so no semantic input is silently skipped.
 - Require-aware project/dependency/stdlib reachability plus strict/tolerant
   snapshots, revision-safe `NodeRef` handles, interned `TypeId` values,
   declaration/method indexing, inheritance/includes, constructors, generic
-  return substitution, unions, macro-generated methods, and conservative
-  undefined-method diagnostics.
+  return substitution, unions, macro-generated methods, bare zero-argument
+  calls, untyped/defaulted call-site specialization, target-aware overload
+  selection, and conservative undefined-method diagnostics.
 - cr-analyzer shadow/on integration with coded LSP diagnostics. Shadow is the
   default; `on` is covered for ordinary, unknown-receiver, and macro-generated
   method cases.
@@ -199,7 +206,7 @@ current architecture, not a fixed CI threshold.
 
 ## Remaining cutover work
 
-1. Grow the 29/529 semantic baseline across constants, overload restrictions,
+1. Grow the 131/529 semantic baseline across constants, overload restrictions,
    free variables, control-flow narrowing, blocks, and remaining diagnostics;
    keep every non-matching case explicitly deferred.
 2. Feed `SemanticSnapshot` types/bindings into completion, hover, navigation,
