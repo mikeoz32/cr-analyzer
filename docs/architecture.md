@@ -16,8 +16,10 @@ This document describes the major runtime pieces and the request flow.
   edge resolution and revision invalidation.
 - Facet expanded declaration slices: cached `QueryDb#expand` results are diffed
   against raw syntax and indexed under stable `facet-macro:` URIs.
-- Facet 0.1.5 `QueryDb` / `SyntaxTree`: revisioned syntax, diagnostics, cursor,
+- Facet 0.2.0 `QueryDb` / `SyntaxTree`: revisioned syntax, diagnostics, cursor,
   document-symbol, and editor-position queries.
+- Facet `SemanticDb`: require-aware source graph, canonical types,
+  revision-safe semantic facts, method lookup, and coded diagnostics.
 - Completion providers: `SemanticIndex`, `KeywordCompletionProvider`, `RequirePathCompletionProvider`.
 - `DocumentSymbolsIndex`: AST visitor for document/workspace symbols.
 
@@ -35,8 +37,9 @@ This document describes the major runtime pieces and the request flow.
    Crystal visitors are fallback.
 7. type hierarchy and inline values -> Facet; call hierarchy -> Facet call-site
    cache and lazy semantic resolution, with legacy edges as a measured fallback.
-8. diagnostics -> cached Facet parse + Facet-native local lints -> publish/pull;
-   Crystal::Parser is the explicit fallback outside Facet-only mode.
+8. diagnostics -> cached Facet parse + Facet-native local lints + Facet
+   `SemanticDb`; semantic results are shadow-only by default and publish when
+   `CRA_FACET_SEMANTICS=on`.
 
 ## Indexing and updates
 
@@ -63,6 +66,9 @@ This document describes the major runtime pieces and the request flow.
 - Facet include/extend and superclass relationships drive dependent-file
   invalidation. Legacy relationships remain only for legacy index refreshes.
 - stdlib lookup uses CRYSTAL_PATH or CRYSTAL_HOME, with /usr/share/crystal/src as fallback.
+- Semantic lookup starts from the current document, follows its transitive
+  `require` graph across project, shard, and stdlib roots, and never treats
+  every registered file as implicitly visible.
 
 ## Parser boundary
 

@@ -28,7 +28,7 @@ Active development. Implemented LSP features include completion (with resolve), 
 - Type hierarchy (prepare/super/sub types).
 - Rename (prepare + apply; best-effort for locals, ivars, methods, type paths in workspace).
 - Diagnostics:
-  - Facet 0.1.5 parser diagnostics by default, with Crystal::Parser as a fallback.
+  - Facet 0.2.0 parser diagnostics by default, with Crystal::Parser as a fallback.
   - Lint-style warnings (TODO/FIXME, empty rescue, trailing whitespace, duplicate `require`, missing final newline, mixed indentation, unused def/block args).
   - Both push and pull diagnostic flows supported.
 - Completion:
@@ -73,7 +73,11 @@ expanded source in an editor.
 
 ## Limitations
 
-- No full compiler type checking or complete type-aware macro expansion. Type inference is best-effort based on annotations and simple assignments.
+- Facet 0.2.0 includes the first require-aware compiler semantic query slice,
+  but not full Crystal type checking. It binds declarations, interns semantic
+  types, performs basic body/constructor/generic inference, resolves methods,
+  and conservatively detects missing methods. Unknown or incomplete facts
+  suppress semantic diagnostics.
 - Facet incrementally expands standard declaration macros and a substantial
   user-macro subset, including lexical `@type`, indexed type resolution,
   method/instance-variable/constant and annotation metadata, and explicit
@@ -128,6 +132,12 @@ expanded source in an editor.
   AST remains for unsupported macro semantics, inference fallback, and remaining
   cutover work. `CRA_FACET_ONLY=1` disables construction of that AST; the complete
   workspace LSP contract suite runs in this mode in CI.
+- Compiler semantic diagnostics use `CRA_FACET_SEMANTICS=off|shadow|on`.
+  `shadow` is the default: results are computed and logged without being sent
+  to the editor. Set it to `on` to publish only conclusive coded
+  `facet-semantic` diagnostics; provisional findings remain shadow telemetry.
+  This remains opt-in until the supported upstream denominator and workspace
+  false-positive gates are large enough for a default cutover.
 
 ## Usage
 
@@ -177,6 +187,7 @@ startup.
 - Compare built-server initialization modes: `python3 scripts/bench_lsp_initialize.py`
 - Quick client harness: uv run main.py (uses the Python env in pyproject.toml)
 - Debug: CRA_DUMP_ROOTS=1 to dump index roots after initial scan
+- Semantic diagnostics: `CRA_FACET_SEMANTICS=shadow` (default), `on`, or `off`
 
 ## Docs
 

@@ -5,6 +5,11 @@ The Facet-native producer populates the primary editor index; the temporary
 Crystal producer remains as a fallback for unsupported type-aware macro
 expansion and semantic shapes.
 
+Facet 0.2.0 additionally owns the compiler-facing `SemanticDb`. It returns
+immutable tolerant/strict snapshots with `NodeRef`, `DefId`, `MethodId`, and
+canonical `TypeId` handles. `CRA::Psi::SemanticIndex` is currently an adapter
+and fallback; new compiler semantics belong in Facet rather than in LSP code.
+
 ## Data model
 
 - PsiElement base class with file and location.
@@ -33,6 +38,20 @@ Type inference is intentionally light. The indexer extracts TypeRef from:
 - simple assignments when the RHS is a Foo.new call
 - array or hash literals with an explicit of type
 - casts, metaclasses, and union/generic type syntax
+
+`Facet::Compiler::SemanticDb` separately covers literals, assignments,
+constructors, annotated and simply inferred method returns, generic receiver
+substitution, unions, inheritance/includes, arity-filtered lookup, and
+macro-generated entry-file declarations. Incomplete facts remain `Unknown`.
+
+## Semantic diagnostics
+
+`facet.undefined_method` is emitted only when every closed receiver member has
+a complete lookup and none defines the method. Unknown receivers, unresolved
+requires, parser recovery, incomplete macro expansion, and `method_missing`
+suppress or mark it provisional. cr-analyzer computes all findings in shadow
+mode by default; `CRA_FACET_SEMANTICS=on` publishes only conclusive findings
+with source `facet-semantic`.
 
 ## Resolution
 

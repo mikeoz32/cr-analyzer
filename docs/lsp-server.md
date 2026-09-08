@@ -35,7 +35,7 @@ ServerCapabilities are kept in sync with implemented handlers. Notable gaps: sem
 
 ## Diagnostics
 
-- Default: Facet 0.1.5 parser diagnostics plus lint-style warnings (TODO/FIXME, empty rescue, trailing whitespace, duplicate require, missing final newline, mixed indentation, unused args/block args).
+- Default: Facet 0.2.0 parser diagnostics plus lint-style warnings (TODO/FIXME, empty rescue, trailing whitespace, duplicate require, missing final newline, mixed indentation, unused args/block args). Compiler semantic diagnostics are computed in shadow mode; set `CRA_FACET_SEMANTICS=on` to publish them.
 - Fallback: Crystal::Parser when Facet diagnostics fail internally or when `CRA_DISABLE_FACET_DIAGNOSTICS=1`.
 - Scope: Facet now provides cached syntax, cursor lookup, selection ranges, and
   document/workspace symbols, plus the primary declaration semantic index.

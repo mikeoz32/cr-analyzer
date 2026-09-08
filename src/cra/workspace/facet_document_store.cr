@@ -17,6 +17,7 @@ module CRA
     getter queries : Facet::Compiler::QueryDb
     getter expansion_queries : Facet::Compiler::QueryDb
     getter macro_context : Facet::Compiler::MacroExpansionContext
+    getter semantic_db : Facet::Compiler::SemanticDb?
 
     def initialize(
       @macro_context : Facet::Compiler::MacroExpansionContext = FacetDocumentStore.build_target_macro_context,
@@ -30,6 +31,24 @@ module CRA
       @expansion_uris_by_file = {} of Facet::Compiler::FileId => String
       @expanded_arenas = {} of String => Facet::Compiler::AstArena
       @expanded_trees = {} of String => Facet::Compiler::SyntaxTree
+      @semantic_db = nil
+    end
+
+    def configure_semantics(roots : Enumerable(String), prelude : String? = "prelude") : Nil
+      resolver = Facet::Compiler::RegisteredSourceResolver.new(roots, prelude)
+      @semantic_db = Facet::Compiler::SemanticDb.new(@queries, resolver, @macro_context)
+    end
+
+    def semantic_snapshot(
+      uri : String,
+      mode : Facet::Compiler::SemanticMode = Facet::Compiler::SemanticMode::Tolerant,
+    ) : Facet::Compiler::SemanticSnapshot?
+      file_id = @files_by_uri[uri]?
+      semantic = @semantic_db
+      return nil unless file_id && semantic
+      expanded = expanded_syntax(uri)
+      expanded_entries = expanded ? {file_id => expanded} : ({} of Facet::Compiler::FileId => Facet::Compiler::SyntaxTree)
+      semantic.analyze([file_id], mode, expanded_entries, expand_entries: false)
     end
 
     # Registers workspace/dependency files without forcing a parse. This keeps

@@ -425,7 +425,7 @@ module CRA
             call_hierarchy_provider: true,
             inline_value_provider: true,
             diagnostic_provider: Types::DiagnosticOptions.new(
-              inter_file_dependencies: false,
+              inter_file_dependencies: true,
               workspace_diagnostics: false
             )
           )

@@ -2,6 +2,80 @@ require "../../spec_helper"
 require "../../../src/cra/workspace"
 
 describe CRA::Workspace do
+  it "keeps Facet semantic diagnostics in shadow mode by default" do
+    with_tmpdir do |dir|
+      path = File.join(dir, "shadow.cr")
+      File.write(path, "class Item; end\nItem.new.missing\n")
+      ws = workspace_for(dir)
+
+      diagnostics = ws.publish_diagnostics("file://#{path}").diagnostics
+      diagnostics.none? { |diagnostic| diagnostic.source == "facet-semantic" }.should be_true
+      ws.facet_store.semantic_db.not_nil!.stats.analysis_executions.should be > 0
+    end
+  end
+
+  it "publishes conservative Facet undefined-method diagnostics when enabled" do
+    with_tmpdir do |dir|
+      path = File.join(dir, "semantic.cr")
+      File.write(path, <<-CR)
+        class Item
+          def present : Int32
+            1
+          end
+        end
+
+        item = Item.new
+        item.present
+        item.missing
+        unknown.missing
+      CR
+      ws = workspace_for(dir)
+
+      begin
+        ENV["CRA_FACET_SEMANTICS"] = "on"
+        diagnostics = ws.publish_diagnostics("file://#{path}").diagnostics.select do |diagnostic|
+          diagnostic.source == "facet-semantic"
+        end
+        diagnostics.size.should eq(1)
+        diagnostics.first.code.should eq("facet.undefined_method")
+        diagnostics.first.message.should eq("undefined method 'missing' for Item")
+      ensure
+        ENV.delete("CRA_FACET_SEMANTICS")
+      end
+    end
+  end
+
+  it "recognizes macro-generated methods before publishing semantic diagnostics" do
+    with_tmpdir do |dir|
+      path = File.join(dir, "generated.cr")
+      File.write(path, <<-CR)
+        macro add_generated
+          def generated : Int32
+            42
+          end
+        end
+
+        class Item
+          add_generated
+        end
+
+        Item.new.generated
+        Item.new.absent
+      CR
+      ws = workspace_for(dir)
+
+      begin
+        ENV["CRA_FACET_SEMANTICS"] = "on"
+        diagnostics = ws.publish_diagnostics("file://#{path}").diagnostics.select do |diagnostic|
+          diagnostic.source == "facet-semantic"
+        end
+        diagnostics.map(&.message).should eq(["undefined method 'absent' for Item"])
+      ensure
+        ENV.delete("CRA_FACET_SEMANTICS")
+      end
+    end
+  end
+
   it "returns facet parse diagnostics for bad syntax" do
     with_tmpdir do |dir|
       code = <<-CR

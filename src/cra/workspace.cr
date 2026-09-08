@@ -40,6 +40,7 @@ module CRA
       raise "Only file:// URIs are supported" unless @root.scheme == "file"
       @path = Path.new(@root.path)
       @facet_store = FacetDocumentStore.new
+      @facet_store.configure_semantics(semantic_roots)
       @indexer = DocumentSymbolsIndex.new
       @facet_indexer = FacetDocumentSymbolsIndex.new
       @facet_call_graph = FacetCallGraphIndex.new
@@ -112,6 +113,15 @@ module CRA
         paths << default if Dir.exists?(default.to_s)
       end
       paths.uniq
+    end
+
+    private def semantic_roots : Array(String)
+      roots = [@path.to_s, @path.join("src").to_s]
+      Dir.glob(@path.join("lib/*/src").to_s) { |path| roots << path }
+      unless ENV["CRA_SKIP_STDLIB_SCAN"]? == "1"
+        stdlib_paths.each { |path| roots << path.to_s }
+      end
+      roots.select { |path| Dir.exists?(path) }.uniq
     end
 
     private def scan_path(path : Path, seen : Hash(String, Bool))
@@ -918,7 +928,7 @@ module CRA
       document = document(request.text_document.uri)
       return Types::DocumentDiagnosticReportFull.new([] of Types::Diagnostic) unless document
 
-      Types::DocumentDiagnosticReportFull.new(document.diagnostics)
+      Types::DocumentDiagnosticReportFull.new(combined_diagnostics(request.text_document.uri, document))
     end
 
     def workspace_symbols(request : Types::WorkspaceSymbolRequest) : Array(Types::SymbolInformation)
@@ -952,8 +962,61 @@ module CRA
 
     def publish_diagnostics(uri : String) : Types::PublishDiagnosticsParams
       document = document(uri)
-      diags = document ? document.diagnostics : [] of Types::Diagnostic
+      diags = document ? combined_diagnostics(uri, document) : [] of Types::Diagnostic
       Types::PublishDiagnosticsParams.new(uri: uri, diagnostics: diags)
+    end
+
+    private def combined_diagnostics(uri : String, document : WorkspaceDocument) : Array(Types::Diagnostic)
+      diagnostics = document.diagnostics.dup
+      diagnostics.concat(facet_semantic_diagnostics(uri))
+      diagnostics
+    end
+
+    private def facet_semantic_diagnostics(uri : String) : Array(Types::Diagnostic)
+      mode = facet_semantic_mode
+      return [] of Types::Diagnostic if mode == "off"
+      snapshot = @facet_store.semantic_snapshot(uri)
+      return [] of Types::Diagnostic unless snapshot
+      file_id = @facet_store.file_id(uri)
+      return [] of Types::Diagnostic unless file_id
+      semantic_diagnostics = snapshot.diagnostics_for(file_id)
+      if mode == "shadow"
+        Log.debug do
+          reasons = snapshot.completeness_reasons.map(&.to_s).sort.join(',')
+          conclusive = semantic_diagnostics.count(&.confidence.conclusive?)
+          "Facet semantic shadow uri=#{uri} diagnostics=#{semantic_diagnostics.size} conclusive=#{conclusive} complete=#{snapshot.complete?} reasons=#{reasons}"
+        end
+        return [] of Types::Diagnostic
+      end
+
+      syntax = @facet_store.syntax(uri)
+      return [] of Types::Diagnostic unless syntax
+      semantic_diagnostics.select(&.confidence.conclusive?).map do |diagnostic|
+        start_location = syntax.position_at(diagnostic.span.start)
+        end_location = syntax.position_at(diagnostic.span.finish)
+        severity = diagnostic.severity == Facet::Compiler::SemanticDiagnosticSeverity::Warning ? Types::DiagnosticSeverity::Warning : Types::DiagnosticSeverity::Error
+        Types::Diagnostic.new(
+          range: Types::Range.new(
+            Types::Position.new(line: start_location.line, character: start_location.character),
+            Types::Position.new(line: end_location.line, character: end_location.character)
+          ),
+          severity: severity,
+          code: diagnostic.code,
+          message: diagnostic.message,
+          source: "facet-semantic"
+        )
+      end
+    rescue ex : Exception
+      Log.error { "Facet semantic diagnostics failed for #{uri}: #{ex.message}" }
+      [] of Types::Diagnostic
+    end
+
+    private def facet_semantic_mode : String
+      case ENV["CRA_FACET_SEMANTICS"]?.try(&.downcase)
+      when "off" then "off"
+      when "on"  then "on"
+      else            "shadow"
+      end
     end
 
     private def elements_to_locations(elements : Array(Psi::PsiElement)) : Array(Types::Location)

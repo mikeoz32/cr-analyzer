@@ -22,6 +22,8 @@ async def test_advertises_incremental_text_sync(lsp_client: LanguageClient):
     sync = lsp_client.initialize_result.capabilities.text_document_sync
     assert isinstance(sync, TextDocumentSyncOptions)
     assert sync.change == TextDocumentSyncKind.Incremental
+    diagnostic_provider = lsp_client.initialize_result.capabilities.diagnostic_provider
+    assert diagnostic_provider.inter_file_dependencies is True
 
 
 @pytest.mark.asyncio

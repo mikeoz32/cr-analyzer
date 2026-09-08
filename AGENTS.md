@@ -5,7 +5,7 @@ This file is for contributors and automation agents working on this repo.
 ## Project summary
 
 cr-analyzer is a lightweight LSP server for Crystal. It builds an editor-oriented
-semantic index without invoking the full compiler. Facet 0.1.5 now provides a
+semantic index without invoking the full compiler. Facet 0.2.0 now provides a
 workspace-owned incremental syntax database, diagnostics, cursor lookup,
 selection ranges, document/workspace symbols, and the primary declaration-level
 semantic index. Facet owns completion syntax and common inference, navigation,
@@ -47,9 +47,14 @@ expansions are covered. Successful results compare literal payloads as well as
 semantic AST shape; failures compare exact diagnostics. Event parity uses one
 `MacroExpander#expand_once` pass while production expansion still reaches a
 fixed point.
-The Crystal path remains an explicit fallback for live compiler/type macro APIs
-beyond the captured runtime corpus, unsupported inference shapes, and semantic
-consumers.
+Facet 0.2.0 also introduces the compiler-grade `SemanticDb`: a require-aware
+project/dependency/stdlib graph, canonical `TypeId` values, revision-safe
+`NodeRef` handles, strict/tolerant snapshots, basic binding/body inference,
+method lookup, and coded semantic diagnostics. Its first official Crystal 1.21
+slice captures 529 type/error contracts from 397 examples: 29 are exact and all
+500 remaining cases are explicitly classified as deferred. The Crystal path
+remains an explicit fallback for live compiler/type macro APIs beyond the
+captured runtime corpus, unsupported inference shapes, and semantic consumers.
 
 ## Setup
 
@@ -64,6 +69,7 @@ consumers.
 - Facet upstream macro parity: `(cd ../facet && crystal run scripts/check_upstream_macro_parity.cr)`
 - Facet executed macro parity: `(cd ../facet && crystal run scripts/check_upstream_macro_runtime_parity.cr)`
 - Facet semantic macro parity: `(cd ../facet && crystal run scripts/check_upstream_macro_semantic_parity.cr)`
+- Facet compiler semantic parity: `(cd ../facet && crystal run scripts/check_upstream_semantic_parity.cr)`
 - Initialize benchmark: python3 scripts/bench_lsp_initialize.py
 - Manual client: uv run main.py (uses the Python env in pyproject.toml)
 
@@ -99,9 +105,19 @@ consumers.
   collection macro blocks keep their own parameters and propagate outer values.
   The explicit build-target `MacroExpansionContext` participates in Facet's
   expansion cache key, so `flag?` branches cannot reuse output from another target.
-- diagnostics -> Facet parser diagnostics + local lint checks -> push or pull response.
+- diagnostics -> Facet parser diagnostics + local lint checks; Facet `SemanticDb`
+  runs in shadow mode by default and can publish conservative coded diagnostics
+  with `CRA_FACET_SEMANTICS=on`; provisional findings remain shadow-only.
 
 ## Semantic Index notes
+
+- Facet `SemanticDb` is the compiler-facing semantic source of truth. It works
+  directly on Facet's native AST and returns neutral IDs/snapshots; it must not
+  depend on CRA/LSP types. The existing `CRA::Psi::SemanticIndex` remains the
+  editor adapter and migration fallback.
+- Semantic diagnostics must degrade to `Unknown` when parsing, requires, macro
+  expansion, hierarchy, or receiver facts are incomplete. Never turn a partial
+  result into an `undefined method` diagnostic.
 
 - Two passes: SkeletonIndexer (type shells) and SemanticIndexer (methods/includes/enums/aliases).
 - TypeRef is lightweight: name + generic args + union types. Inference is best-effort (annotations, Foo.new, Array/Hash literals with of).
@@ -160,6 +176,8 @@ consumers.
 - CRA_SKIP_STDLIB_SCAN=1 skips stdlib indexing for focused tests/debugging.
 - CRA_DISABLE_FACET_DIAGNOSTICS=1 disables Facet diagnostics.
 - CRA_FACET_ONLY=1 disables Crystal parsing for the workspace contract lane.
+- CRA_FACET_SEMANTICS=off|shadow|on controls compiler semantic diagnostics;
+  default is shadow until the published-diagnostic parity gates pass.
 
 ## LSP status
 

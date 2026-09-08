@@ -28,6 +28,8 @@ roles, spans, and symbols.
 | Inline values | Facet syntax plus semantic local classification |
 | Call graph | Facet per-file call-site cache plus lazy revision-cached semantic resolution; Crystal fallback for legacy items |
 | Macro support | Facet `QueryDb#expand` plus generated-declaration delta is primary for standard declaration macros and supported user macros, including indexed type/member introspection; Crystal interpreter is fallback for remaining APIs |
+| Compiler semantics | Facet 0.2.0 `SemanticDb`: require-aware reachability, canonical types, revision-safe facts, basic inference/method lookup, and strict/tolerant snapshots |
+| Semantic diagnostics | Confidence-graded `facet.undefined_method`; shadow-computed by default, with only conclusive findings published by `CRA_FACET_SEMANTICS=on` |
 | Facet-only validation | `CRA_FACET_ONLY=1` disables Crystal AST construction; all workspace LSP specs run against Facet alone in CI |
 
 Each URI has a stable Facet `FileId`. A document version is parsed once and its
@@ -58,6 +60,19 @@ speedup. Reproduce the machine-local comparison with
 current architecture, not a fixed CI threshold.
 
 ## Completed gates
+
+- A committed first compiler-semantic corpus from eight official Crystal 1.21
+  suites: 397 examples execute 529 type/error contracts. Facet matches the
+  initial 29-contract baseline exactly; all 500 remaining contracts are listed
+  with explicit deferred reasons, so no semantic input is silently skipped.
+- Require-aware project/dependency/stdlib reachability plus strict/tolerant
+  snapshots, revision-safe `NodeRef` handles, interned `TypeId` values,
+  declaration/method indexing, inheritance/includes, constructors, generic
+  return substitution, unions, macro-generated methods, and conservative
+  undefined-method diagnostics.
+- cr-analyzer shadow/on integration with coded LSP diagnostics. Shadow is the
+  default; `on` is covered for ordinary, unknown-receiver, and macro-generated
+  method cases.
 
 - Exact Crystal 1.21 parser decision parity on all 4,378 captured upstream
   cases, including exact diagnostics for 941 rejected inputs.
@@ -184,13 +199,17 @@ current architecture, not a fixed CI threshold.
 
 ## Remaining cutover work
 
-1. Extend Facet inference across the remaining literal, implicit-call, destructure,
-   and control-flow shapes, then retire the completion fallback.
-2. Extend call-graph differential coverage across overloads, dynamic receivers,
+1. Grow the 29/529 semantic baseline across constants, overload restrictions,
+   free variables, control-flow narrowing, blocks, and remaining diagnostics;
+   keep every non-matching case explicitly deferred.
+2. Feed `SemanticSnapshot` types/bindings into completion, hover, navigation,
+   and call resolution under shadow comparison, then retire matching Psi
+   heuristics slice by slice.
+3. Extend call-graph differential coverage across overloads, dynamic receivers,
    and representative workspaces, then retire its legacy Crystal fallback.
-3. Compare Facet-first public LSP results on stdlib and representative
+4. Compare Facet-first public LSP results on stdlib and representative
    workspaces, not only focused declaration contracts.
-4. Supply the fully covered macro gate's remaining type/annotation context from
+5. Supply the fully covered macro gate's remaining type/annotation context from
    the live require-aware index; then remove the cr-analyzer interpreter and all
    `compiler/crystal/syntax` requires after shadow validation.
 
