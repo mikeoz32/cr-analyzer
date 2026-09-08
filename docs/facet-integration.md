@@ -69,14 +69,16 @@ current architecture, not a fixed CI threshold.
 
 - A committed first compiler-semantic corpus from eight official Crystal 1.21
   suites: 397 examples execute 529 type/error contracts. Facet matches the
-  current 243-contract baseline exactly; all 286 remaining contracts are listed
+  current 265-contract baseline exactly; all 264 remaining contracts are listed
   with explicit deferred reasons, so no semantic input is silently skipped.
 - Require-aware project/dependency/stdlib reachability plus strict/tolerant
   snapshots, revision-safe `NodeRef` handles, interned `TypeId` values,
   declaration/method indexing, inheritance/includes, constructors, generic
   return substitution, unions, macro-generated methods, bare zero-argument
-  calls, untyped/defaulted call-site specialization, target-aware overload
-  selection, and conservative undefined-method diagnostics.
+  calls, untyped/defaulted and typed call-site specialization, method-level
+  `forall` inference through values, metaclasses, defaults, optional unions,
+  tuples, and generic returns, target-aware overload selection, and conservative
+  undefined-method diagnostics.
 - cr-analyzer shadow/on integration with coded LSP diagnostics. Shadow is the
   default; `on` is covered for ordinary, unknown-receiver, and macro-generated
   method cases.
@@ -195,7 +197,7 @@ current architecture, not a fixed CI threshold.
 - Expanded Facet ASTs feed generated-only semantic slices, including completion,
   navigation, and call hierarchy in Crystal-rejected buffers. Macro-provider
   edits reindex only the footprint-invalidated consumer files.
-- The complete workspace LSP contract runs with no Crystal AST: 103/103 examples
+- The complete workspace LSP contract runs with no Crystal AST: 116/116 examples
   cover completion, navigation, diagnostics/lints, symbols, references, rename,
   inline values, call/type hierarchy, macro-generated declarations, and
   dependent reindexing.
@@ -206,9 +208,9 @@ current architecture, not a fixed CI threshold.
 
 ## Remaining cutover work
 
-1. Grow the 243/529 semantic baseline across constants, typed/named overload
-   restrictions, free variables, control-flow narrowing, blocks, and remaining
-   diagnostics;
+1. Grow the 265/529 semantic baseline across constants, typed/named overload
+   restrictions, block/splat and generic-include free-variable binding,
+   control-flow narrowing, and remaining diagnostics;
    keep every non-matching case explicitly deferred.
 2. Feed `SemanticSnapshot` types/bindings into completion, hover, navigation,
    and call resolution under shadow comparison, then retire matching Psi

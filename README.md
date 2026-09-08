@@ -75,9 +75,11 @@ expanded source in an editor.
 
 - Facet 0.2.0 includes the first require-aware compiler semantic query slice,
   but not full Crystal type checking. It binds declarations, interns semantic
-  types, performs basic body/constructor/generic inference, resolves methods,
-  and conservatively detects missing methods. Unknown or incomplete facts
-  suppress semantic diagnostics.
+  types, performs basic body/constructor/generic inference, specializes method
+  bodies from actual call-site arguments, binds method-level `forall` variables
+  across the currently covered value/metaclass/default/optional-union/tuple
+  shapes, resolves methods, and conservatively detects missing methods. Unknown
+  or incomplete facts suppress semantic diagnostics.
 - Facet incrementally expands standard declaration macros and a substantial
   user-macro subset, including lexical `@type`, indexed type resolution,
   method/instance-variable/constant and annotation metadata, and explicit
