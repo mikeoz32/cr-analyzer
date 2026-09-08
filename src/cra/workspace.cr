@@ -639,8 +639,14 @@ module CRA
       document = document(request.text_document.uri)
       return [] of Types::DocumentHighlight unless document
 
-      if locations = facet_reference_locations(document, request.position, request.text_document.uri, true)
-        highlights = locations.select { |location| location.uri == request.text_document.uri }.map do |location|
+      if locations = facet_reference_locations(
+           document,
+           request.position,
+           request.text_document.uri,
+           true,
+           request.text_document.uri
+         )
+        highlights = locations.map do |location|
           Types::DocumentHighlight.new(location.range)
         end
         return highlights unless highlights.empty?

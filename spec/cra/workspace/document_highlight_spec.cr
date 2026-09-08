@@ -106,4 +106,43 @@ describe CRA::Workspace do
       highlights.size.should eq(3)
     end
   end
+
+  it "limits Facet type highlights to the current document" do
+    definition_code = <<-CRYSTAL
+      class Shared
+      end
+    CRYSTAL
+    current_code = <<-CRYSTAL
+      def current(value : Shared)
+        Shared.new
+      end
+    CRYSTAL
+    other_code = <<-CRYSTAL
+      def other(value : Shared)
+        Shared.new
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      definition_path = File.join(dir, "a_definition.cr")
+      current_path = File.join(dir, "b_current.cr")
+      other_path = File.join(dir, "c_other.cr")
+      File.write(definition_path, definition_code)
+      File.write(current_path, current_code)
+      File.write(other_path, other_code)
+      workspace = workspace_for(dir)
+      uri = "file://#{current_path}"
+      index = index_for(current_code, "Shared")
+
+      highlights = workspace.document_highlights(
+        document_highlight_request(uri, position_for(current_code, index + 1))
+      )
+
+      highlights.size.should eq(2)
+      highlights.map(&.range).map { |range| range_key(range) }.sort.should eq([
+        range_for(current_code, index_for(current_code, "Shared", 0), "Shared".size),
+        range_for(current_code, index_for(current_code, "Shared", 1), "Shared".size),
+      ].map { |range| range_key(range) }.sort)
+    end
+  end
 end

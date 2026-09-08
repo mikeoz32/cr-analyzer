@@ -9,6 +9,7 @@ module CRA
       position : Types::Position,
       uri : String,
       include_declaration : Bool,
+      search_uri : String? = nil,
     ) : Array(Types::Location)?
       finder = document.facet_node_context(position)
       return nil unless finder
@@ -22,16 +23,16 @@ module CRA
                          Facet::Compiler::NodeKind::DoubleSplat, Facet::Compiler::NodeKind::BlockParam
                       if name.starts_with?("@@")
                         type_name = finder.enclosing_type_name
-                        type_name ? facet_scoped_variable_occurrences(type_name, name, Facet::Compiler::NodeKind::ClassVar) : [] of FacetOccurrence
+                        type_name ? facet_scoped_variable_occurrences(type_name, name, Facet::Compiler::NodeKind::ClassVar, search_uri) : [] of FacetOccurrence
                       elsif name.starts_with?("@")
                         type_name = finder.enclosing_type_name
-                        type_name ? facet_scoped_variable_occurrences(type_name, name, Facet::Compiler::NodeKind::InstanceVar) : [] of FacetOccurrence
+                        type_name ? facet_scoped_variable_occurrences(type_name, name, Facet::Compiler::NodeKind::InstanceVar, search_uri) : [] of FacetOccurrence
                       else
                         facet_local_occurrences(finder, name, uri, include_declaration)
                       end
                     when Facet::Compiler::NodeKind::InstanceVar, Facet::Compiler::NodeKind::ClassVar
                       type_name = finder.enclosing_type_name
-                      type_name ? facet_scoped_variable_occurrences(type_name, name, node.kind) : [] of FacetOccurrence
+                      type_name ? facet_scoped_variable_occurrences(type_name, name, node.kind, search_uri) : [] of FacetOccurrence
                     when Facet::Compiler::NodeKind::Call, Facet::Compiler::NodeKind::CallWithBlock,
                          Facet::Compiler::NodeKind::Binary, Facet::Compiler::NodeKind::Def,
                          Facet::Compiler::NodeKind::Fun
@@ -39,19 +40,19 @@ module CRA
                         node, finder.context_path, finder.byte_offset, finder.enclosing_type_name, uri
                       )
                       keys = method_keys_for(definitions)
-                      keys.empty? ? [] of FacetOccurrence : facet_method_occurrences(keys, include_declaration)
+                      keys.empty? ? [] of FacetOccurrence : facet_method_occurrences(keys, include_declaration, search_uri)
                     when Facet::Compiler::NodeKind::Ident
                       if !name[0].ascii_uppercase?
                         definitions = @facet_analyzer.find_facet_definitions(
                           node, finder.context_path, finder.byte_offset, finder.enclosing_type_name, uri
                         )
                         keys = method_keys_for(definitions)
-                        keys.empty? ? facet_local_occurrences(finder, name, uri, include_declaration) : facet_method_occurrences(keys, include_declaration)
+                        keys.empty? ? facet_local_occurrences(finder, name, uri, include_declaration) : facet_method_occurrences(keys, include_declaration, search_uri)
                       else
-                        facet_type_reference_occurrences(node, finder, uri, include_declaration)
+                        facet_type_reference_occurrences(node, finder, uri, include_declaration, search_uri)
                       end
                     else
-                      facet_type_reference_occurrences(node, finder, uri, include_declaration)
+                      facet_type_reference_occurrences(node, finder, uri, include_declaration, search_uri)
                     end
 
       occurrences.map { |occurrence| Types::Location.new(uri: occurrence.uri, range: occurrence.range) }
@@ -65,12 +66,13 @@ module CRA
       finder : FacetNodeFinder,
       uri : String,
       include_declaration : Bool,
+      search_uri : String? = nil,
     ) : Array(FacetOccurrence)
       definitions = @facet_analyzer.find_facet_definitions(
         node, finder.context_path, finder.byte_offset, finder.enclosing_type_name, uri
       )
       keys = type_keys_for(definitions)
-      keys.empty? ? [] of FacetOccurrence : facet_type_occurrences(keys, include_declaration)
+      keys.empty? ? [] of FacetOccurrence : facet_type_occurrences(keys, include_declaration, search_uri)
     end
 
     private def facet_local_occurrences(
@@ -171,10 +173,11 @@ module CRA
       type_name : String,
       name : String,
       kind : Facet::Compiler::NodeKind,
+      search_uri : String? = nil,
     ) : Array(FacetOccurrence)
       occurrences = [] of FacetOccurrence
       seen = Set(String).new
-      workspace_file_uris.each do |uri|
+      facet_occurrence_uris(search_uri).each do |uri|
         tree = @facet_store.syntax(uri)
         next unless tree
         tree.root.descendants.each do |type_node|
@@ -213,12 +216,13 @@ module CRA
     private def facet_method_occurrences(
       target_keys : Hash(String, Bool),
       include_declarations : Bool = true,
+      search_uri : String? = nil,
     ) : Array(FacetOccurrence)
       occurrences = [] of FacetOccurrence
       seen = Set(String).new
       target_names = target_keys.each_key.map { |key| key.split(':').last }.to_set
 
-      workspace_file_uris.each do |uri|
+      facet_occurrence_uris(search_uri).each do |uri|
         tree = @facet_store.syntax(uri)
         next unless tree
 
@@ -257,10 +261,11 @@ module CRA
     private def facet_type_occurrences(
       target_keys : Hash(String, Bool),
       include_declarations : Bool = true,
+      search_uri : String? = nil,
     ) : Array(FacetOccurrence)
       occurrences = [] of FacetOccurrence
       seen = Set(String).new
-      workspace_file_uris.each do |uri|
+      facet_occurrence_uris(search_uri).each do |uri|
         tree = @facet_store.syntax(uri)
         next unless tree
 
@@ -299,6 +304,10 @@ module CRA
         end
       end
       occurrences
+    end
+
+    private def facet_occurrence_uris(search_uri : String?) : Array(String)
+      search_uri ? [search_uri] : workspace_file_uris
     end
 
     private def facet_definitions_for_candidate(
