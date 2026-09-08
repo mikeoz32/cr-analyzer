@@ -39,6 +39,38 @@ Active development. Implemented LSP features include completion (with resolve), 
   - `require` path suggestions
   - completion resolve for docs and signatures
 
+## Macro-generated code
+
+Facet incrementally expands standard declaration macros and supported
+project-defined macros into its native AST. Generated methods and types are
+stored in revisioned `facet-macro:` semantic slices, so they participate in
+completion, navigation, hover, references, rename, and hierarchy features just
+like source declarations. Editing either a macro provider or one of its
+consumers invalidates only the affected expansion slices.
+
+For example, completion after `box.be` includes the generated `before` method:
+
+```crystal
+macro make_getter(name)
+  def {{name.id}} : String
+    "generated"
+  end
+end
+
+class Box
+  make_getter :before
+end
+
+def test(box : Box)
+  box.be
+end
+```
+
+This path is covered by the Facet-only workspace contract, where no Crystal AST
+is constructed. Macro expansion is currently an internal semantic input; the
+LSP does not yet expose a command or virtual document for viewing the complete
+expanded source in an editor.
+
 ## Limitations
 
 - No full compiler type checking or complete type-aware macro expansion. Type inference is best-effort based on annotations and simple assignments.
