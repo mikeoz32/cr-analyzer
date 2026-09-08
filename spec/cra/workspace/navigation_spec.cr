@@ -60,6 +60,47 @@ private def implementation_request(uri : String, position : CRA::Types::Position
 end
 
 describe CRA::Workspace do
+  it "maps legacy macro-generated declarations back to the macro call" do
+    code = <<-CRYSTAL
+      class Person
+        getter name : String
+      end
+
+      def read_name(person : Person)
+        person.name
+      end
+    CRYSTAL
+
+    with_tmpdir do |dir|
+      path = File.join(dir, "legacy_macro_navigation.cr")
+      uri = "file://#{path}"
+      File.write(path, code)
+      facet_only = ENV.delete("CRA_FACET_ONLY")
+      begin
+        workspace = workspace_for(dir)
+
+        # Force this regression through the legacy fallback. Facet-generated
+        # locations intentionally retain their facet-macro URI for now.
+        workspace.facet_analyzer.remove_file(uri)
+        workspace.facet_analyzer.remove_file("facet-macro:#{path}")
+
+        call_index = index_for(code, "person.name") + "person.".size + 1
+        declarations = workspace.find_declarations(
+          declaration_request(uri, position_for(code, call_index))
+        )
+
+        declarations.size.should eq(1)
+        declarations.first.uri.should eq(uri)
+        expected = position_for(code, index_for(code, "getter"))
+        declarations.first.range.start_position.line.should eq(expected.line)
+        declarations.first.range.start_position.character.should eq(expected.character)
+        declarations.first.range.end_position.character.should eq(expected.character + "getter".size)
+      ensure
+        ENV["CRA_FACET_ONLY"] = facet_only if facet_only
+      end
+    end
+  end
+
   it "navigates to a Facet macro-generated method without a Crystal AST" do
     box_code = <<-CRYSTAL
       class Box

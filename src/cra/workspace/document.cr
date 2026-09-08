@@ -116,6 +116,7 @@ module CRA
       if ENV["CRA_DISABLE_FACET_DIAGNOSTICS"]? == "1"
         add_parser_error_diagnostic
         add_todo_warnings(text)
+        add_empty_rescue_warnings
         add_unused_arg_warnings
         return
       end
@@ -141,6 +142,7 @@ module CRA
       ensure
         @last_parse_error = nil
         add_todo_warnings(text)
+        add_empty_rescue_warnings
         add_unused_arg_warnings
       end
     end
@@ -175,17 +177,6 @@ module CRA
             severity: Types::DiagnosticSeverity::Warning,
             message: "Todo/Fixme: #{match[0]}",
             source: "todo"
-          )
-        end
-
-        if line.strip == "rescue"
-          start_pos = Types::Position.new(line: idx, character: 0)
-          end_pos = Types::Position.new(line: idx, character: line.size)
-          @diagnostics << Types::Diagnostic.new(
-            range: Types::Range.new(start_pos, end_pos),
-            severity: Types::DiagnosticSeverity::Warning,
-            message: "Empty rescue block?",
-            source: "lint"
           )
         end
 
@@ -236,6 +227,37 @@ module CRA
       end
 
       mixed_indent_lines(lines)
+    end
+
+    private def add_empty_rescue_warnings : Nil
+      if syntax = @facet_syntax
+        syntax.nodes(Facet::Compiler::NodeKind::Rescue).each do |clause|
+          next unless clause.semantic_flag?(Facet::Compiler::SemanticFlag::RescueClause)
+          body = clause.children.find { |child| child.kind == Facet::Compiler::NodeKind::Expressions }
+          next unless body && body.children.empty?
+
+          start_offset = clause.span.start
+          end_offset = Math.min(start_offset + "rescue".bytesize, clause.span.finish)
+          start_location = syntax.position_at(start_offset)
+          end_location = syntax.position_at(end_offset)
+          add_empty_rescue_warning(
+            Types::Position.new(line: start_location.line, character: start_location.character),
+            Types::Position.new(line: end_location.line, character: end_location.character)
+          )
+        end
+        return
+      end
+
+      @program.try &.accept(EmptyRescueCollector.new(@diagnostics))
+    end
+
+    private def add_empty_rescue_warning(start_position : Types::Position, end_position : Types::Position) : Nil
+      @diagnostics << Types::Diagnostic.new(
+        range: Types::Range.new(start_position, end_position),
+        severity: Types::DiagnosticSeverity::Warning,
+        message: "Empty rescue block?",
+        source: "lint"
+      )
     end
 
     private def mixed_indent_lines(lines : Array(String))
@@ -365,6 +387,7 @@ module CRA
       continue_all
 
       def visit(node : Crystal::Def) : Bool
+        return true if node.abstract?
         args = node.args.reject { |arg| arg.name.starts_with?("_") }
         return true if args.empty?
 
@@ -395,6 +418,37 @@ module CRA
             source: "lint"
           )
         end
+      end
+    end
+
+    # Crystal AST fallback for the empty-rescue lint. The primary path above
+    # consumes the workspace-owned Facet syntax tree.
+    class EmptyRescueCollector < Crystal::Visitor
+      include Workspace::VisitorHelpers
+
+      def initialize(@diagnostics : Array(CRA::Types::Diagnostic))
+      end
+
+      continue_all
+
+      def visit(node : Crystal::ExceptionHandler) : Bool
+        node.rescues.try &.each do |clause|
+          next unless clause.body.is_a?(Crystal::Nop)
+          next unless loc = clause.location
+
+          start_position = CRA::Types::Position.new(line: loc.line_number - 1, character: loc.column_number - 1)
+          end_position = CRA::Types::Position.new(
+            line: loc.line_number - 1,
+            character: loc.column_number - 1 + "rescue".size
+          )
+          @diagnostics << CRA::Types::Diagnostic.new(
+            range: CRA::Types::Range.new(start_position, end_position),
+            severity: CRA::Types::DiagnosticSeverity::Warning,
+            message: "Empty rescue block?",
+            source: "lint"
+          )
+        end
+        true
       end
     end
 

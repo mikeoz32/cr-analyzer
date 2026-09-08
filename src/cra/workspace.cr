@@ -963,13 +963,13 @@ module CRA
         def_loc = def_node.location
         def_file = def_node.file
         next unless def_loc && def_file
-        uri = psi_file_uri(def_file)
-        key = "#{uri}:#{def_loc.start_line}:#{def_loc.start_character}:#{def_loc.end_line}:#{def_loc.end_character}"
+        uri, range = psi_location(def_file, def_loc)
+        key = "#{uri}:#{range.start_position.line}:#{range.start_position.character}:#{range.end_position.line}:#{range.end_position.character}"
         next if seen[key]?
         seen[key] = true
         locations << Types::Location.new(
           uri: uri,
-          range: def_loc.to_range
+          range: range
         )
       end
       locations
@@ -1012,7 +1012,7 @@ module CRA
     end
 
     private def hover_section(definition : Psi::PsiElement) : String
-      signature = hover_signature(definition)
+      signature = hover_markdown_signature(definition)
       content = "```crystal\n#{signature}\n```"
 
       if doc = definition.doc
@@ -1022,18 +1022,15 @@ module CRA
       content
     end
 
+    private def hover_markdown_signature(definition : Psi::PsiElement) : String
+      return hover_signature(definition) unless definition.is_a?(Psi::Method)
+      method_signature(definition, markdown: true)
+    end
+
     private def hover_signature(definition : Psi::PsiElement) : String
       case definition
       when Psi::Method
-        owner_name = definition.owner.try(&.name) || "self"
-        separator = definition.class_method ? "." : "#"
-        params = definition.parameters.join(", ")
-        signature = "def #{owner_name}#{separator}#{definition.name}"
-        signature += "(#{params})" unless params.empty?
-        if definition.return_type_ref
-          signature += " : #{definition.return_type}"
-        end
-        signature
+        method_signature(definition)
       when Psi::Class
         "class #{@analyzer.type_signature_for(definition.name)}"
       when Psi::Module
@@ -1057,6 +1054,23 @@ module CRA
       else
         definition.name
       end
+    end
+
+    private def method_signature(definition : Psi::Method, markdown : Bool = false) : String
+      owner_name = definition.owner.try(&.name) || "self"
+      separator = definition.class_method ? "." : "#"
+      identity = "#{owner_name}#{separator}#{definition.name}"
+      declaration = if markdown && !definition.class_method
+                      "# #{identity}\ndef #{definition.name}"
+                    else
+                      "def #{identity}"
+                    end
+      params = definition.parameters.join(", ")
+      declaration += "(#{params})" unless params.empty?
+      if definition.return_type_ref
+        declaration += " : #{definition.return_type}"
+      end
+      declaration
     end
 
     private def signature_documentation(method : Psi::Method) : JSON::Any?
@@ -1507,8 +1521,7 @@ module CRA
       loc = element.location
       file = element.file
       return nil unless loc && file
-      uri = psi_file_uri(file)
-      range = loc.to_range
+      uri, range = psi_location(file, loc)
       data = if facet && (method = element.as?(Psi::Method))
                JSON::Any.new({"facetMethodKey" => JSON::Any.new(method_key(method.owner.try(&.name) || "", method.class_method, method.name))})
              end
@@ -1531,8 +1544,7 @@ module CRA
       loc = element.location
       file = element.file
       return nil unless loc && file
-      uri = psi_file_uri(file)
-      range = loc.to_range
+      uri, range = psi_location(file, loc)
       Types::TypeHierarchyItem.new(
         name: element.name,
         kind: symbol_kind_for(element),
@@ -1564,6 +1576,25 @@ module CRA
       URI.parse(file).scheme ? file : "file://#{file}"
     rescue
       "file://#{file}"
+    end
+
+    # Legacy macro expansion locations use an internal URI whose final path
+    # components encode the source call site. Editors cannot open that virtual
+    # URI, so LSP locations point back to the invocation. Facet macro URIs stay
+    # untouched until the dedicated macro-expansion document flow is designed.
+    private def psi_location(file : String, location : Psi::Location) : {String, Types::Range}
+      if file.starts_with?("crystal-macro:")
+        raw = file.byte_slice("crystal-macro:".bytesize, file.bytesize - "crystal-macro:".bytesize)
+        if raw && (match = raw.match(/^(.+)\/([^\/]+)\/(\d+)_(\d+)\.cr$/))
+          line = Math.max(match[3].to_i - 1, 0)
+          character = Math.max(match[4].to_i - 1, 0)
+          start_position = Types::Position.new(line: line, character: character)
+          end_position = Types::Position.new(line: line, character: character + match[2].size)
+          return {psi_file_uri(match[1]), Types::Range.new(start_position, end_position)}
+        end
+      end
+
+      {psi_file_uri(file), location.to_range}
     end
 
     # Collects inline value variable lookups within a requested range.

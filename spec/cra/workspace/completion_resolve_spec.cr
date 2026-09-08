@@ -26,12 +26,12 @@ private def completion_request(uri : String, position : CRA::Types::Position, tr
 
   payload = {
     jsonrpc: "2.0",
-    id: 1,
-    method: "textDocument/completion",
-    params: {
+    id:      1,
+    method:  "textDocument/completion",
+    params:  {
       textDocument: {uri: uri},
-      position: {line: position.line, character: position.character},
-      context: context,
+      position:     {line: position.line, character: position.character},
+      context:      context,
     },
   }.to_json
 
@@ -74,7 +74,9 @@ describe CRA::Workspace do
       contents = resolved.documentation.not_nil!.as_h
       contents["kind"].as_s.should eq("markdown")
       value = contents["value"].as_s
-      value.should contain("def Greeter#greet(name)")
+      value.should contain("# Greeter#greet")
+      value.should contain("def greet(name)")
+      value.should_not contain("def Greeter#greet")
       value.should contain("Says hello.")
     end
   end

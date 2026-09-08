@@ -115,4 +115,30 @@ describe CRA::NodeFinder do
     finder.previous_node.should be_a(Crystal::Generic)
     finder.previous_node.as(Crystal::Generic).name.to_s.should eq("Array")
   end
+
+  it "includes the last character of ivar-backed parameter names" do
+    code = <<-CRYSTAL
+      class Socket
+        def initialize(@ip : Bytes)
+        end
+      end
+    CRYSTAL
+
+    finder = find_finder(code, "@ip", 0, 2)
+    finder.node.should be_a(Crystal::Arg)
+    finder.node.as(Crystal::Arg).name.should eq("ip")
+  end
+
+  it "uses the outer method as the scope inside proc literals" do
+    code = <<-CRYSTAL
+      def call
+        value = "outer"
+        callback = ->(item : Int32) { value }
+      end
+    CRYSTAL
+
+    finder = find_finder(code, "value", 1, 2)
+    finder.enclosing_def.should_not be_nil
+    finder.enclosing_def.not_nil!.name.should eq("call")
+  end
 end

@@ -167,8 +167,71 @@ describe CRA::Workspace do
       })).as(CRA::Types::DocumentDiagnosticRequest)
 
       report = ws.document_diagnostics(request).as(CRA::Types::DocumentDiagnosticReportFull)
-      report.items.any? { |d| d.source == "lint" && d.severity == CRA::Types::DiagnosticSeverity::Warning && d.message.includes?("Empty rescue") }.should be_true
+      diagnostic = report.items.find { |d| d.source == "lint" && d.severity == CRA::Types::DiagnosticSeverity::Warning && d.message.includes?("Empty rescue") }
+      diagnostic.should_not be_nil
+      diagnostic.not_nil!.range.start_position.line.should eq(2)
+      diagnostic.not_nil!.range.start_position.character.should eq(0)
+      diagnostic.not_nil!.range.end_position.line.should eq(2)
+      diagnostic.not_nil!.range.end_position.character.should eq(6)
     end
+  end
+
+  it "does not warn on non-empty or modifier rescue expressions" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      begin
+        foo
+      rescue
+        channel.send(nil)
+      end
+
+      value = foo rescue fallback
+      CR
+      path = File.join(dir, "non_empty_rescue.cr")
+      File.write(path, code)
+      params = workspace_for(dir).publish_diagnostics("file://#{path}")
+
+      params.diagnostics.any? { |d| d.message.includes?("Empty rescue") }.should be_false
+    end
+  end
+
+  it "warns on every empty rescue clause, including named clauses" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      begin
+        foo
+      rescue ex : IO::Error
+      rescue Exception
+      end
+      CR
+      path = File.join(dir, "named_empty_rescue.cr")
+      File.write(path, code)
+      params = workspace_for(dir).publish_diagnostics("file://#{path}")
+
+      warnings = params.diagnostics.select { |d| d.source == "lint" && d.message.includes?("Empty rescue") }
+      warnings.size.should eq(2)
+      warnings.map(&.range.start_position.line).should eq([2, 3])
+    end
+  end
+
+  it "keeps empty rescue detection in the Crystal AST fallback" do
+    code = <<-CR
+    begin
+      work
+    rescue
+    end
+
+    begin
+      work
+    rescue
+      recover
+    end
+    CR
+    diagnostics = [] of CRA::Types::Diagnostic
+    program = Crystal::Parser.new(code).parse
+    program.accept(CRA::WorkspaceDocument::EmptyRescueCollector.new(diagnostics))
+
+    diagnostics.count { |diagnostic| diagnostic.message.includes?("Empty rescue") }.should eq(1)
   end
 
   it "hints trailing whitespace" do
@@ -220,6 +283,34 @@ describe CRA::Workspace do
       report.items.any? { |d| d.message.includes?("Unused argument '_b'") }.should be_false
       report.items.any? { |d| d.message.includes?("Unused argument 'c'") }.should be_false
     end
+  end
+
+  it "does not report abstract method parameters as unused" do
+    with_tmpdir do |dir|
+      code = <<-CR
+      abstract class Handler
+        abstract def handle(value, context : String) : Nil
+      end
+      CR
+      path = File.join(dir, "abstract_args.cr")
+      File.write(path, code)
+      params = workspace_for(dir).publish_diagnostics("file://#{path}")
+
+      params.diagnostics.any? { |d| d.source == "lint" && d.message.includes?("Unused argument") }.should be_false
+    end
+  end
+
+  it "skips abstract method parameters in the Crystal AST fallback" do
+    code = <<-CR
+    abstract class Handler
+      abstract def handle(value, context : String) : Nil
+    end
+    CR
+    diagnostics = [] of CRA::Types::Diagnostic
+    program = Crystal::Parser.new(code).parse
+    program.accept(CRA::WorkspaceDocument::UnusedArgCollector.new(diagnostics))
+
+    diagnostics.any? { |diagnostic| diagnostic.message.includes?("Unused argument") }.should be_false
   end
 
   it "publishes diagnostics params" do

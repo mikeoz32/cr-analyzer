@@ -62,7 +62,9 @@ describe CRA::Workspace do
       contents = hover.not_nil!.contents.as_h
       contents["kind"].as_s.should eq("markdown")
       value = contents["value"].as_s
-      value.should contain("def Greeter#greet(name)")
+      value.should contain("# Greeter#greet")
+      value.should contain("def greet(name)")
+      value.should_not contain("def Greeter#greet")
       value.should contain("Says hello.")
     end
   end
@@ -96,7 +98,9 @@ describe CRA::Workspace do
       hover = workspace.hover(hover_request(uri, position_for(editing_code, index))).not_nil!
       value = hover.contents.as_h["value"].as_s
 
-      value.should contain("def Greeter#greet(name)")
+      value.should contain("# Greeter#greet")
+      value.should contain("def greet(name)")
+      value.should_not contain("def Greeter#greet")
       value.should contain("Says hello.")
     end
   end

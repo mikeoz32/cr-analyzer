@@ -564,8 +564,13 @@ module CRA::Psi
     private def method_signature(method : CRA::Psi::Method) : String
       owner_name = method.owner.try(&.name) || "self"
       separator = method.class_method ? "." : "#"
+      identity = "#{owner_name}#{separator}#{method.name}"
       params = method.parameters.join(", ")
-      signature = "def #{owner_name}#{separator}#{method.name}"
+      signature = if method.class_method
+                    "def #{identity}"
+                  else
+                    "# #{identity}\ndef #{method.name}"
+                  end
       signature += "(#{params})" unless params.empty?
       if method.return_type_ref
         signature += " : #{method.return_type}"
