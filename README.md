@@ -79,9 +79,11 @@ expanded source in an editor.
   bodies from actual call-site arguments, binds method-level `forall` variables
   across the currently covered value/metaclass/default/optional-union/tuple
   shapes plus block returns, splats, and generic include constraints, preserves
-  named-tuple keys in type identities, resolves methods, and conservatively
-  detects missing methods. Unknown or incomplete facts suppress semantic
-  diagnostics.
+  named-tuple keys in type identities, resolves methods and scoped constants,
+  and conservatively detects missing methods. Constant inference covers
+  lexical/absolute/nested paths, inheritance/includes, enum members, `forall`
+  metaclass paths, and revision-safe invalidation across required files. Unknown
+  or incomplete facts suppress semantic diagnostics.
 - Facet incrementally expands standard declaration macros and a substantial
   user-macro subset, including lexical `@type`, indexed type resolution,
   method/instance-variable/constant and annotation metadata, and explicit

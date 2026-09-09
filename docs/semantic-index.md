@@ -41,8 +41,11 @@ Type inference is intentionally light. The indexer extracts TypeRef from:
 
 `Facet::Compiler::SemanticDb` separately covers literals, assignments,
 constructors, annotated and simply inferred method returns, generic receiver
-substitution, unions, inheritance/includes, arity-filtered lookup, and
-macro-generated entry-file declarations. Incomplete facts remain `Unknown`.
+substitution, unions, inheritance/includes, arity-filtered lookup, scoped
+constant definitions and lazy values, enum-member types, and macro-generated
+entry-file declarations. Constant lookup follows lexical, absolute, nested,
+ancestor/include, and `forall` metaclass paths; required-file edits invalidate
+dependent snapshots. Incomplete facts remain `Unknown`.
 
 ## Semantic diagnostics
 
