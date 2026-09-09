@@ -20,7 +20,7 @@ This document describes the major runtime pieces and the request flow.
   document-symbol, and editor-position queries.
 - Facet `SemanticDb`: require-aware source graph, canonical types,
   revision-safe semantic facts, method/scoped-constant lookup and inference,
-  and coded diagnostics.
+  branch-sensitive control-flow narrowing, and coded diagnostics.
 - Completion providers: `SemanticIndex`, `KeywordCompletionProvider`, `RequirePathCompletionProvider`.
 - `DocumentSymbolsIndex`: AST visitor for document/workspace symbols.
 

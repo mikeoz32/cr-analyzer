@@ -80,10 +80,13 @@ expanded source in an editor.
   across the currently covered value/metaclass/default/optional-union/tuple
   shapes plus block returns, splats, and generic include constraints, preserves
   named-tuple keys in type identities, resolves methods and scoped constants,
-  and conservatively detects missing methods. Constant inference covers
-  lexical/absolute/nested paths, inheritance/includes, enum members, `forall`
-  metaclass paths, and revision-safe invalidation across required files. Unknown
-  or incomplete facts suppress semantic diagnostics.
+  narrows truthiness, `nil?`, and `is_a?` across short-circuit branches and
+  return guards, and conservatively detects missing methods. Constant inference
+  covers lexical/absolute/nested paths, inheritance/includes, enum members, `forall`
+  metaclass paths, and revision-safe invalidation across required files. Coded
+  diagnostics cover unresolved constants, constant cycles, initializer-local
+  leakage, and constants used as types. Unknown or incomplete facts suppress
+  semantic diagnostics.
 - Facet incrementally expands standard declaration macros and a substantial
   user-macro subset, including lexical `@type`, indexed type resolution,
   method/instance-variable/constant and annotation metadata, and explicit

@@ -52,7 +52,7 @@ project/dependency/stdlib graph, canonical `TypeId` values, revision-safe
 `NodeRef` handles, strict/tolerant snapshots, basic binding/body inference,
 method lookup, and coded semantic diagnostics. Its first official Crystal 1.21
 slice captures 582 type/error/no-error contracts from 449 examples across nine
-suites: 295 are exact and all 287 remaining cases are explicitly classified as
+suites: 321 are exact and all 261 remaining cases are explicitly classified as
 deferred. This includes
 bare zero-argument calls, call-site specialization for untyped/defaulted
 parameters, structural generic/union arguments, and target-aware overload
@@ -63,7 +63,12 @@ generic include constraints; named tuple type identities retain their keys.
 Constants are indexed as semantic definitions, lazily inferred in an isolated
 environment, and resolved through lexical scope, absolute/nested paths,
 inheritance/includes, enum members, and `forall` metaclass paths. Required-file
-constant edits invalidate dependent semantic snapshots.
+constant edits invalidate dependent semantic snapshots. Coded constant
+diagnostics cover unresolved paths, initializer-local leakage, inference cycles,
+and constants in type positions. Branch-sensitive inference narrows truthiness,
+`nil?`, and `is_a?` through negation and short-circuit boolean expressions,
+merges conditional assignments, and preserves explicit return types across
+return guards.
 The Crystal path
 remains an explicit fallback for live compiler/type macro APIs beyond the
 captured runtime corpus, unsupported inference shapes, and semantic consumers.

@@ -45,6 +45,24 @@ describe CRA::Workspace do
     end
   end
 
+  it "publishes conclusive Facet constant diagnostics when enabled" do
+    with_tmpdir do |dir|
+      path = File.join(dir, "constants.cr")
+      File.write(path, "VALUE = 1\nitem : VALUE\nMissing\n")
+      ws = workspace_for(dir)
+
+      begin
+        ENV["CRA_FACET_SEMANTICS"] = "on"
+        diagnostics = ws.publish_diagnostics("file://#{path}").diagnostics.select do |diagnostic|
+          diagnostic.source == "facet-semantic"
+        end
+        diagnostics.map(&.code).should eq(["facet.constant_as_type", "facet.undefined_constant"])
+      ensure
+        ENV.delete("CRA_FACET_SEMANTICS")
+      end
+    end
+  end
+
   it "recognizes macro-generated methods before publishing semantic diagnostics" do
     with_tmpdir do |dir|
       path = File.join(dir, "generated.cr")

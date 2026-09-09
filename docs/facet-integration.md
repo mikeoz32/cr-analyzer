@@ -28,8 +28,8 @@ roles, spans, and symbols.
 | Inline values | Facet syntax plus semantic local classification |
 | Call graph | Facet per-file call-site cache plus lazy revision-cached semantic resolution; Crystal fallback for legacy items |
 | Macro support | Facet `QueryDb#expand` plus generated-declaration delta is primary for standard declaration macros and supported user macros, including indexed type/member introspection; Crystal interpreter is fallback for remaining APIs |
-| Compiler semantics | Facet 0.2.0 `SemanticDb`: require-aware reachability, canonical types, revision-safe facts, method and scoped-constant inference/lookup, and strict/tolerant snapshots |
-| Semantic diagnostics | Confidence-graded `facet.undefined_method`; shadow-computed by default, with only conclusive findings published by `CRA_FACET_SEMANTICS=on` |
+| Compiler semantics | Facet 0.2.0 `SemanticDb`: require-aware reachability, canonical types, revision-safe facts, method/scoped-constant inference, branch-sensitive narrowing, explicit-return flow, and strict/tolerant snapshots |
+| Semantic diagnostics | Confidence-graded missing-method and constant diagnostics; shadow-computed by default, with only conclusive findings published by `CRA_FACET_SEMANTICS=on` |
 | Facet-only validation | `CRA_FACET_ONLY=1` disables Crystal AST construction; all workspace LSP specs run against Facet alone in CI |
 
 Each URI has a stable Facet `FileId`. A document version is parsed once and its
@@ -65,16 +65,17 @@ speedup. Reproduce the machine-local comparison with
 `python3 scripts/bench_lsp_initialize.py`; the result is evidence for the
 current architecture, not a fixed CI threshold.
 
-On 2026-09-09, the same repository with the expanded constant semantics took
-16.662 seconds for the complete workspace scan, 457.9 ms for the compiler
-semantic snapshot over 297 indexed files, and 0.3 ms for the unchanged cached
-semantic query. This is a machine-local diagnostic run, not a portable target.
+On 2026-09-09, the same repository with the expanded constant and control-flow
+semantics took 16.501 seconds for the complete workspace scan, 473.1 ms for the
+compiler semantic snapshot over 297 indexed files, and 0.3 ms for the unchanged
+cached semantic query. This is a machine-local diagnostic run, not a portable
+target.
 
 ## Completed gates
 
 - A committed compiler-semantic corpus from nine official Crystal 1.21 suites:
   449 examples execute 582 type/error/no-error contracts. Facet matches the
-  current 295-contract baseline exactly; all 287 remaining contracts are listed
+  current 321-contract baseline exactly; all 261 remaining contracts are listed
   with explicit deferred reasons, so no semantic input is silently skipped.
 - Require-aware project/dependency/stdlib reachability plus strict/tolerant
   snapshots, revision-safe `NodeRef` handles, interned `TypeId` values,
@@ -86,8 +87,10 @@ semantic query. This is a machine-local diagnostic run, not a portable target.
   constraints, keyed named-tuple type identities, target-aware overload
   selection, scoped constant definitions and lazy inference, implicit module
   namespaces, enum-member types, lexical/absolute/ancestor lookup, `forall`
-  metaclass paths, required-file invalidation, and conservative undefined-method
-  diagnostics.
+  metaclass paths, required-file invalidation, constant diagnostics, truthiness/
+  `nil?`/`is_a?` narrowing through short-circuit boolean flow, conditional
+  assignment merging, explicit-return collection, and conservative
+  undefined-method diagnostics.
 - cr-analyzer shadow/on integration with coded LSP diagnostics. Shadow is the
   default; `on` is covered for ordinary, unknown-receiver, and macro-generated
   method cases.
@@ -217,9 +220,8 @@ semantic query. This is a machine-local diagnostic run, not a portable target.
 
 ## Remaining cutover work
 
-1. Grow the 295/582 semantic baseline across constant diagnostics and cycles,
-   typed/named overload restrictions, control-flow narrowing, proc argument
-   shapes, and remaining diagnostics;
+1. Grow the 321/582 semantic baseline across typed/named overload restrictions,
+   proc argument shapes, richer loops/exception flow, and remaining diagnostics;
    keep every non-matching case explicitly deferred.
 2. Feed `SemanticSnapshot` types/bindings into completion, hover, navigation,
    and call resolution under shadow comparison, then retire matching Psi

@@ -45,16 +45,22 @@ substitution, unions, inheritance/includes, arity-filtered lookup, scoped
 constant definitions and lazy values, enum-member types, and macro-generated
 entry-file declarations. Constant lookup follows lexical, absolute, nested,
 ancestor/include, and `forall` metaclass paths; required-file edits invalidate
-dependent snapshots. Incomplete facts remain `Unknown`.
+dependent snapshots. Conditional flow narrows truthiness, `nil?`, and `is_a?`
+through negation and short-circuit expressions, merges branch assignments, and
+retains explicit return types while excluding terminated guards. Incomplete
+facts remain `Unknown`.
 
 ## Semantic diagnostics
 
 `facet.undefined_method` is emitted only when every closed receiver member has
-a complete lookup and none defines the method. Unknown receivers, unresolved
-requires, parser recovery, incomplete macro expansion, and `method_missing`
-suppress or mark it provisional. cr-analyzer computes all findings in shadow
-mode by default; `CRA_FACET_SEMANTICS=on` publishes only conclusive findings
-with source `facet-semantic`.
+a complete lookup and none defines the method. Facet also emits coded
+`facet.undefined_constant`, `facet.undefined_local`, `facet.constant_cycle`,
+and `facet.constant_as_type` diagnostics for the exact supported compiler
+contracts. Unknown receivers, unresolved requires, parser recovery, incomplete
+macro expansion, and `method_missing` suppress or mark uncertain findings
+provisional. cr-analyzer computes all findings in shadow mode by default;
+`CRA_FACET_SEMANTICS=on` publishes only conclusive findings with source
+`facet-semantic`.
 
 ## Resolution
 
