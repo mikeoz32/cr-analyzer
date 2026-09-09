@@ -52,11 +52,12 @@ project/dependency/stdlib graph, canonical `TypeId` values, revision-safe
 `NodeRef` handles, strict/tolerant snapshots, basic binding/body inference,
 method lookup, and coded semantic diagnostics. Its first official Crystal 1.21
 slice captures 582 type/error/no-error contracts from 449 examples across nine
-suites: 349 are exact and all 233 remaining cases are explicitly classified as
+suites: 381 are exact and all 201 remaining cases are explicitly classified as
 deferred. This includes
 bare zero-argument calls, call-site specialization for untyped/defaulted
 parameters, structural generic/union arguments, and target-aware overload
-selection, including the preview positional-signature order. Method-level
+selection, including the complete captured preview partial order across
+positional, named, splat, and double-splat parameters. Method-level
 `forall` variables are inferred through values, metaclasses, defaults,
 optional/nested unions, tuples, generic returns, block returns, splats, and
 generic include constraints; named tuple type identities retain their keys.
@@ -72,6 +73,9 @@ return guards.
 Overload selection covers built-in numeric ancestry, receiver-relative `self`,
 structural tuple/generic restrictions, block presence, named-argument order,
 double splats, duplicate signatures, and per-member union dispatch.
+Explicit class `new` methods override synthesized construction; initializer
+defaults and named arguments propagate instance-variable types, and native
+`Union(...)` expressions retain normalized metaclass semantics.
 The Crystal path
 remains an explicit fallback for live compiler/type macro APIs beyond the
 captured runtime corpus, unsupported inference shapes, and semantic consumers.

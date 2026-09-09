@@ -75,7 +75,7 @@ run, not a portable target.
 
 - A committed compiler-semantic corpus from nine official Crystal 1.21 suites:
   449 examples execute 582 type/error/no-error contracts. Facet matches the
-  current 349-contract baseline exactly; all 233 remaining contracts are listed
+  current 381-contract baseline exactly; all 201 remaining contracts are listed
   with explicit deferred reasons, so no semantic input is silently skipped.
 - Require-aware project/dependency/stdlib reachability plus strict/tolerant
   snapshots, revision-safe `NodeRef` handles, interned `TypeId` values,
@@ -87,7 +87,9 @@ run, not a portable target.
   constraints, keyed named-tuple type identities, target-aware overload
   selection across built-in ancestry, receiver-relative `self`, structural
   tuple/generic restrictions, blocks, named arguments, double splats, duplicate
-  signatures, and union members, scoped constant definitions and lazy inference, implicit module
+  signatures, the captured preview partial order and union members, explicit
+  class `new` dispatch, initializer-scoped defaults and instance-variable type
+  propagation, normalized `Union(...)` metaclasses, scoped constant definitions and lazy inference, implicit module
   namespaces, enum-member types, lexical/absolute/ancestor lookup, `forall`
   metaclass paths, required-file invalidation, constant diagnostics, truthiness/
   `nil?`/`is_a?` narrowing through short-circuit boolean flow, conditional
@@ -222,8 +224,8 @@ run, not a portable target.
 
 ## Remaining cutover work
 
-1. Grow the 349/582 semantic baseline across the remaining preview-order edge
-   cases, proc argument shapes, richer loops/exception flow, and diagnostics;
+1. Grow the 381/582 semantic baseline across proc argument shapes, richer
+   loops/exception flow, constructor diagnostics, and other semantic errors;
    keep every non-matching case explicitly deferred.
 2. Feed `SemanticSnapshot` types/bindings into completion, hover, navigation,
    and call resolution under shadow comparison, then retire matching Psi
