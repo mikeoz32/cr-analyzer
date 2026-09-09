@@ -65,17 +65,17 @@ speedup. Reproduce the machine-local comparison with
 `python3 scripts/bench_lsp_initialize.py`; the result is evidence for the
 current architecture, not a fixed CI threshold.
 
-On 2026-09-09, the same repository with the expanded constant and control-flow
-semantics took 16.501 seconds for the complete workspace scan, 473.1 ms for the
-compiler semantic snapshot over 297 indexed files, and 0.3 ms for the unchanged
-cached semantic query. This is a machine-local diagnostic run, not a portable
-target.
+On 2026-09-09, the same repository with the expanded constant, control-flow,
+and overload semantics took 17.035 seconds for the complete workspace scan,
+456.2 ms for the compiler semantic snapshot over 297 indexed files, and 0.6 ms
+for the unchanged cached semantic query. This is a machine-local diagnostic
+run, not a portable target.
 
 ## Completed gates
 
 - A committed compiler-semantic corpus from nine official Crystal 1.21 suites:
   449 examples execute 582 type/error/no-error contracts. Facet matches the
-  current 321-contract baseline exactly; all 261 remaining contracts are listed
+  current 349-contract baseline exactly; all 233 remaining contracts are listed
   with explicit deferred reasons, so no semantic input is silently skipped.
 - Require-aware project/dependency/stdlib reachability plus strict/tolerant
   snapshots, revision-safe `NodeRef` handles, interned `TypeId` values,
@@ -85,7 +85,9 @@ target.
   `forall` inference through values, metaclasses, defaults, optional unions,
   tuples, generic returns, block returns, splats, and generic include
   constraints, keyed named-tuple type identities, target-aware overload
-  selection, scoped constant definitions and lazy inference, implicit module
+  selection across built-in ancestry, receiver-relative `self`, structural
+  tuple/generic restrictions, blocks, named arguments, double splats, duplicate
+  signatures, and union members, scoped constant definitions and lazy inference, implicit module
   namespaces, enum-member types, lexical/absolute/ancestor lookup, `forall`
   metaclass paths, required-file invalidation, constant diagnostics, truthiness/
   `nil?`/`is_a?` narrowing through short-circuit boolean flow, conditional
@@ -220,8 +222,8 @@ target.
 
 ## Remaining cutover work
 
-1. Grow the 321/582 semantic baseline across typed/named overload restrictions,
-   proc argument shapes, richer loops/exception flow, and remaining diagnostics;
+1. Grow the 349/582 semantic baseline across the remaining preview-order edge
+   cases, proc argument shapes, richer loops/exception flow, and diagnostics;
    keep every non-matching case explicitly deferred.
 2. Feed `SemanticSnapshot` types/bindings into completion, hover, navigation,
    and call resolution under shadow comparison, then retire matching Psi

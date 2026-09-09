@@ -244,6 +244,31 @@ describe CRA::FacetDocumentStore do
     end
   end
 
+  it "exposes Facet overload selection through semantic snapshots" do
+    with_tmpdir do |dir|
+      path = File.join(dir, "overloads.cr")
+      uri = "file://#{path}"
+      store = CRA::FacetDocumentStore.new
+      file_id = store.register(uri, <<-CRYSTAL, path)
+        def choose(value : Int); 2.5; end
+        def choose(value : Float); 1; end
+        def named(a : Int32, b : Int32); true; end
+        def named(b : Int32, a : Nil); 'x'; end
+        value = 1 || nil
+        {choose(1), named(a: value, b: 2)}
+      CRYSTAL
+      store.configure_semantics([dir], nil)
+
+      snapshot = store.semantic_snapshot(uri).not_nil!
+      syntax = store.syntax(uri).not_nil!
+      result = syntax.root.children.last.children.last
+      ref = Facet::Compiler::NodeRef.new(file_id, result.id, store.manager.revision(file_id))
+      store.semantic_db.not_nil!.types.display(snapshot.type_of(ref).not_nil!).should eq(
+        "Tuple(Float64, (Bool | Char))"
+      )
+    end
+  end
+
   it "derives default macro flags from the cr-analyzer build target" do
     context = CRA::FacetDocumentStore.build_target_macro_context
 

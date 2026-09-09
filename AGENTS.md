@@ -52,7 +52,7 @@ project/dependency/stdlib graph, canonical `TypeId` values, revision-safe
 `NodeRef` handles, strict/tolerant snapshots, basic binding/body inference,
 method lookup, and coded semantic diagnostics. Its first official Crystal 1.21
 slice captures 582 type/error/no-error contracts from 449 examples across nine
-suites: 321 are exact and all 261 remaining cases are explicitly classified as
+suites: 349 are exact and all 233 remaining cases are explicitly classified as
 deferred. This includes
 bare zero-argument calls, call-site specialization for untyped/defaulted
 parameters, structural generic/union arguments, and target-aware overload
@@ -69,6 +69,9 @@ and constants in type positions. Branch-sensitive inference narrows truthiness,
 `nil?`, and `is_a?` through negation and short-circuit boolean expressions,
 merges conditional assignments, and preserves explicit return types across
 return guards.
+Overload selection covers built-in numeric ancestry, receiver-relative `self`,
+structural tuple/generic restrictions, block presence, named-argument order,
+double splats, duplicate signatures, and per-member union dispatch.
 The Crystal path
 remains an explicit fallback for live compiler/type macro APIs beyond the
 captured runtime corpus, unsupported inference shapes, and semantic consumers.

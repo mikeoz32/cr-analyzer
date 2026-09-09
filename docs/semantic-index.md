@@ -43,7 +43,10 @@ Type inference is intentionally light. The indexer extracts TypeRef from:
 constructors, annotated and simply inferred method returns, generic receiver
 substitution, unions, inheritance/includes, arity-filtered lookup, scoped
 constant definitions and lazy values, enum-member types, and macro-generated
-entry-file declarations. Constant lookup follows lexical, absolute, nested,
+entry-file declarations. Overload selection understands built-in numeric
+ancestry, receiver-relative `self`, structural tuple/generic restrictions,
+blocks, named arguments, double splats, duplicate signatures, and per-member
+union dispatch. Constant lookup follows lexical, absolute, nested,
 ancestor/include, and `forall` metaclass paths; required-file edits invalidate
 dependent snapshots. Conditional flow narrows truthiness, `nil?`, and `is_a?`
 through negation and short-circuit expressions, merges branch assignments, and

@@ -80,6 +80,8 @@ expanded source in an editor.
   across the currently covered value/metaclass/default/optional-union/tuple
   shapes plus block returns, splats, and generic include constraints, preserves
   named-tuple keys in type identities, resolves methods and scoped constants,
+  selects overloads through numeric ancestry, `self`, structural restrictions,
+  named arguments, block presence, and per-member union dispatch,
   narrows truthiness, `nil?`, and `is_a?` across short-circuit branches and
   return guards, and conservatively detects missing methods. Constant inference
   covers lexical/absolute/nested paths, inheritance/includes, enum members, `forall`
