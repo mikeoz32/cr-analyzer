@@ -69,7 +69,7 @@ current architecture, not a fixed CI threshold.
 
 - A committed first compiler-semantic corpus from eight official Crystal 1.21
   suites: 397 examples execute 529 type/error contracts. Facet matches the
-  current 265-contract baseline exactly; all 264 remaining contracts are listed
+  current 273-contract baseline exactly; all 256 remaining contracts are listed
   with explicit deferred reasons, so no semantic input is silently skipped.
 - Require-aware project/dependency/stdlib reachability plus strict/tolerant
   snapshots, revision-safe `NodeRef` handles, interned `TypeId` values,
@@ -77,8 +77,9 @@ current architecture, not a fixed CI threshold.
   return substitution, unions, macro-generated methods, bare zero-argument
   calls, untyped/defaulted and typed call-site specialization, method-level
   `forall` inference through values, metaclasses, defaults, optional unions,
-  tuples, and generic returns, target-aware overload selection, and conservative
-  undefined-method diagnostics.
+  tuples, generic returns, block returns, splats, and generic include
+  constraints, keyed named-tuple type identities, target-aware overload
+  selection, and conservative undefined-method diagnostics.
 - cr-analyzer shadow/on integration with coded LSP diagnostics. Shadow is the
   default; `on` is covered for ordinary, unknown-receiver, and macro-generated
   method cases.
@@ -208,9 +209,9 @@ current architecture, not a fixed CI threshold.
 
 ## Remaining cutover work
 
-1. Grow the 265/529 semantic baseline across constants, typed/named overload
-   restrictions, block/splat and generic-include free-variable binding,
-   control-flow narrowing, and remaining diagnostics;
+1. Grow the 273/529 semantic baseline across constants, typed/named overload
+   restrictions, control-flow narrowing, proc argument shapes, and remaining
+   diagnostics;
    keep every non-matching case explicitly deferred.
 2. Feed `SemanticSnapshot` types/bindings into completion, hover, navigation,
    and call resolution under shadow comparison, then retire matching Psi

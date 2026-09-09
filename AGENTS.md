@@ -51,13 +51,15 @@ Facet 0.2.0 also introduces the compiler-grade `SemanticDb`: a require-aware
 project/dependency/stdlib graph, canonical `TypeId` values, revision-safe
 `NodeRef` handles, strict/tolerant snapshots, basic binding/body inference,
 method lookup, and coded semantic diagnostics. Its first official Crystal 1.21
-slice captures 529 type/error contracts from 397 examples: 265 are exact and
-all 264 remaining cases are explicitly classified as deferred. This includes
+slice captures 529 type/error contracts from 397 examples: 273 are exact and
+all 256 remaining cases are explicitly classified as deferred. This includes
 bare zero-argument calls, call-site specialization for untyped/defaulted
 parameters, structural generic/union arguments, and target-aware overload
 selection, including the preview positional-signature order. Method-level
 `forall` variables are inferred through values, metaclasses, defaults,
-optional unions, tuples, and generic returns. The Crystal path
+optional/nested unions, tuples, generic returns, block returns, splats, and
+generic include constraints; named tuple type identities retain their keys.
+The Crystal path
 remains an explicit fallback for live compiler/type macro APIs beyond the
 captured runtime corpus, unsupported inference shapes, and semantic consumers.
 

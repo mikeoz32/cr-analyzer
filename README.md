@@ -78,8 +78,10 @@ expanded source in an editor.
   types, performs basic body/constructor/generic inference, specializes method
   bodies from actual call-site arguments, binds method-level `forall` variables
   across the currently covered value/metaclass/default/optional-union/tuple
-  shapes, resolves methods, and conservatively detects missing methods. Unknown
-  or incomplete facts suppress semantic diagnostics.
+  shapes plus block returns, splats, and generic include constraints, preserves
+  named-tuple keys in type identities, resolves methods, and conservatively
+  detects missing methods. Unknown or incomplete facts suppress semantic
+  diagnostics.
 - Facet incrementally expands standard declaration macros and a substantial
   user-macro subset, including lexical `@type`, indexed type resolution,
   method/instance-variable/constant and annotation metadata, and explicit
